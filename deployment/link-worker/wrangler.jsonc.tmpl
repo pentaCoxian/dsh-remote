@@ -1,0 +1,12 @@
+// Rendered by `node deployment/render.mjs` into deployment/out/link-worker/.
+// Deploy: npx wrangler@4.150.0 deploy --config deployment/out/link-worker/wrangler.jsonc
+// The custom domain makes Cloudflare create the DNS record and certificate for the link host.
+{
+  "name": "dsh-remote-link",
+  "main": "worker.js",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": { "enabled": false },
+  "routes": [{ "pattern": "@LINK_HOSTNAME@", "custom_domain": true }]
+}

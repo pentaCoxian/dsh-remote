@@ -7,7 +7,9 @@
     "node": ">=24.9"
   },
   "scripts": {
-    "test": "pnpm -r --if-present test",
-    "typecheck": "pnpm -r --if-present typecheck"
+    "test": "pnpm -r --if-present test && node --test deployment/test/provision.test.mjs",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "provision": "node deployment/provision.mjs",
+    "render": "node deployment/render.mjs"
   }
 }
