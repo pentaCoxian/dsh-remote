@@ -12,3 +12,6 @@ deployment/out/
 deployment/site.env
 gate-probe.json
 gate-origin.jsonl
+
+# local secrets (Cloudflare API token for deployment/provision.mjs)
+.env
