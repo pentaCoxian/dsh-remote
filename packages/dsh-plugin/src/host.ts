@@ -19,7 +19,8 @@ import type { DocumentStore } from './core/store.ts';
 import { NativeApi } from './http/server.ts';
 
 export interface RemoteHostOptions {
-  readonly adapter: SessionAdapter;
+  /** The DSH binding, or a factory for one that needs the opened host state. */
+  readonly adapter: SessionAdapter | ((state: HostState) => SessionAdapter);
   readonly access: AccessVerifier;
   readonly clock: Clock;
   readonly identity: HostIdentity;
@@ -37,6 +38,8 @@ export interface RemoteHostOptions {
   readonly heartbeatMs?: number;
   /** Process start; signatures older than it are refused. */
   readonly bootMs?: number;
+  /** Reported by `status` for `dsh-remote doctor`. */
+  readonly diagnostics?: { readonly teamName: string; readonly entry: 'production' | 'test-harness' };
 }
 
 export interface PairingOffer {
@@ -50,6 +53,8 @@ export interface PairingOffer {
 /** What the local owner sees for one pending pairing request. */
 export interface PendingPairing {
   readonly pairingRequestId: string;
+  /** Lets a surface match the request to the QR it showed. */
+  readonly challengeId: string;
   readonly accessEmail: string;
   readonly deviceLabel: string;
   readonly platform: string;
@@ -87,6 +92,7 @@ export class RemoteHost {
   readonly approvals: Approvals;
   readonly api: NativeApi;
   readonly socket: EventsSocket;
+  readonly adapter: SessionAdapter;
   private readonly options: RemoteHostOptions;
   private readonly disposers: (() => void)[] = [];
   private listeningPort: number | undefined;
@@ -95,9 +101,10 @@ export class RemoteHost {
     this.options = options;
     this.state = state;
     this.receipts = receipts;
+    this.adapter = typeof options.adapter === 'function' ? options.adapter(state) : options.adapter;
     const { clock } = options;
     this.pairing = new Pairing(state, options.identity, clock, { grantTtlMs: options.grantTtlMs });
-    this.events = new EventHub(options.adapter, state);
+    this.events = new EventHub(this.adapter, state);
     this.leases = new Leases(clock);
     this.approvals = new Approvals(state, this.events, clock, { remoteTimeoutMs: options.remoteApprovalTimeoutMs });
     this.socket = new EventsSocket({ events: this.events, state, leases: this.leases, approvals: this.approvals, clock, ...(options.heartbeatMs === undefined ? {} : { heartbeatMs: options.heartbeatMs }) });
@@ -110,7 +117,7 @@ export class RemoteHost {
       routes: [
         ...metaRoutes({ state, clock, hostName: options.hostName, capabilities: CAPABILITIES }),
         ...pairingRoutes({ pairing: this.pairing, proof, host: options.identity }),
-        ...sessionRoutes({ adapter: options.adapter, state, events: this.events, receipts, leases: this.leases, approvals: this.approvals, clock }),
+        ...sessionRoutes({ adapter: this.adapter, state, events: this.events, receipts, leases: this.leases, approvals: this.approvals, clock }),
       ],
       upgrade: this.socket.route,
       audit: options.audit,
@@ -133,7 +140,7 @@ export class RemoteHost {
   }
 
   async start(): Promise<number> {
-    const { adapter } = this.options;
+    const { adapter } = this;
     this.disposers.push(
       adapter.answerApprovals(this.approvals.answerer),
       this.events.onPrompt((progress) => this.receipts.observe(progress)),
@@ -213,12 +220,15 @@ export class RemoteHost {
     return this.state.revokeDevice(deviceId);
   }
 
-  status(): { hostId: string; hostName: string; origin: string; listening: boolean; hostKeyFingerprint: string; published: string[]; devices: number; pendingPairings: number } {
+  status(): { hostId: string; hostName: string; origin: string; listening: boolean; port: number | null; teamName: string | null; entry: string; hostKeyFingerprint: string; published: string[]; devices: number; pendingPairings: number } {
     return {
       hostId: this.state.hostId,
       hostName: this.options.hostName,
       origin: this.origin,
       listening: this.listeningPort !== undefined,
+      port: this.listeningPort ?? null,
+      teamName: this.options.diagnostics?.teamName ?? null,
+      entry: this.options.diagnostics?.entry ?? 'unknown',
       hostKeyFingerprint: shortFingerprint(this.options.identity.fingerprint),
       published: this.state.publications().map((p) => p.sessionId),
       devices: this.state.devices().filter((d) => d.revokedAt === null).length,
@@ -230,6 +240,7 @@ export class RemoteHost {
 function describePairing(request: PairingRequest): PendingPairing {
   return {
     pairingRequestId: request.pairingRequestId,
+    challengeId: request.challengeId,
     accessEmail: request.accessEmail,
     deviceLabel: request.deviceLabel,
     platform: request.platform,

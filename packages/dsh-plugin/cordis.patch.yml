@@ -1,0 +1,7 @@
+# Bundle patch applied by `dsh plugin --profile web add`. Configure the entry in
+# your profile's cordis.patch.yml (see docs/setup-cloudflare.md):
+#   - id: dsh-remote
+#     config: { publicHost, linkOrigin, access: { teamName, audTags } }
+- insert:
+    - id: dsh-remote
+      name: "@dsh-remote/dsh-plugin"

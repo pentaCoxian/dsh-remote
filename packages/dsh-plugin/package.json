@@ -4,26 +4,52 @@
   "private": true,
   "type": "module",
   "description": "DSH Remote: continue a DeepSeek Harness session from a native phone app over Cloudflare Tunnel + Access",
+  "engines": {
+    "node": ">=24.9",
+    "dsh": "0.2.1-rc.3"
+  },
   "exports": {
     ".": {
+      "source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./testing": {
+      "source": "./src/testing/harness.ts",
+      "types": "./dist/testing/harness.d.ts",
+      "default": "./dist/testing/harness.js"
+    }
+  },
+  "bin": {
+    "dsh-remote": "./dist/cli/main.js"
+  },
+  "files": [
+    "dist",
+    "cordis.patch.yml"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
     }
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:dsh": "pnpm --filter @dsh-remote/protocol build && pnpm build && vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "@dsh-remote/protocol": "workspace:*",
     "jose": "6.2.13",
-    "ws": "8.22.0"
+    "ws": "8.22.0",
+    "qrcode": "1.5.4"
   },
   "devDependencies": {
     "@types/node": "24.19.2",
     "@types/ws": "8.18.2",
     "typescript": "5.9.3",
-    "vitest": "4.1.12"
+    "vitest": "4.1.12",
+    "@types/qrcode": "1.5.6",
+    "@deepseek-ai/dsh": "0.2.1-rc.3"
   }
 }

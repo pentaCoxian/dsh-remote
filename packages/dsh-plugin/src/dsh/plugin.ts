@@ -1,0 +1,89 @@
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { AdminSocket } from '../admin/socket.ts';
+import { runAdmin } from '../admin/ops.ts';
+import type { AccessVerifier } from '../core/access.ts';
+import { FileAudit } from '../core/audit.ts';
+import { systemClock } from '../core/clock.ts';
+import { HostIdentity } from '../core/host-identity.ts';
+import type { ReceiptsDocument } from '../core/receipts.ts';
+import type { HostStateDocument } from '../core/state.ts';
+import { ensurePrivateDir, JsonFileStore } from '../core/store.ts';
+import { RemoteHost } from '../host.ts';
+import { DshAdapter } from './adapter.ts';
+import { adminRoute } from './admin-route.ts';
+import { rcCommand, type RcRuntime } from './commands.ts';
+import type { PluginConfig } from './config.ts';
+import type { DshContext } from './types.ts';
+
+/** `$DSH_HOME`, else `~/.dsh` (same precedence as `@deepseek-ai/dsh-home-paths`). */
+export function resolveDshHome(env: NodeJS.ProcessEnv = process.env): string {
+  const configured = env.DSH_HOME?.trim();
+  return configured ? configured : join(homedir(), '.dsh');
+}
+
+/** Where DSH Remote keeps state, keys, receipts, audit and the admin socket. */
+export function stateDir(env: NodeJS.ProcessEnv = process.env): string {
+  return join(resolveDshHome(env), 'remote');
+}
+
+/** Register `/rc` and `/remote-control`; replies come from whatever `runtime` holds. */
+export function registerCommands(ctx: DshContext, runtime: RcRuntime): void {
+  const handler = rcCommand(runtime);
+  for (const name of ['rc', 'remote-control']) {
+    ctx.effect(() => ctx.commands.register({ name, description: 'Continue this session from the DSH Remote phone app', recordInput: false, handler }), `dsh-remote: /${name}`);
+  }
+}
+
+/**
+ * Start DSH Remote inside a DSH host. Failures are reported through `/rc`
+ * rather than taking the plugin down, so the owner sees what to fix.
+ */
+export function startRemote(ctx: DshContext, config: PluginConfig, access: AccessVerifier, runtime: RcRuntime, entry: 'production' | 'test-harness' = 'production', dir = stateDir()): void {
+  ctx.effect(async () => {
+    let host: RemoteHost | undefined;
+    let adapter: DshAdapter | undefined;
+    const cleanup: (() => unknown)[] = [];
+    try {
+      ensurePrivateDir(dir);
+      const clock = systemClock;
+      const audit = new FileAudit(join(dir, 'audit.jsonl'), clock);
+      host = await RemoteHost.create({
+        adapter: (state) => (adapter = new DshAdapter(ctx, state)),
+        access,
+        clock,
+        identity: await HostIdentity.loadOrCreate(join(dir, 'host-key.pem')),
+        stateStore: new JsonFileStore<HostStateDocument>(join(dir, 'state.json')),
+        receiptsStore: new JsonFileStore<ReceiptsDocument>(join(dir, 'receipts.json')),
+        audit,
+        publicHost: config.publicHost,
+        linkOrigin: config.linkOrigin,
+        port: config.port,
+        hostName: config.hostName,
+        grantTtlMs: config.grantTtlDays * 86_400_000,
+        remoteApprovalTimeoutMs: config.remoteApprovalTimeoutSec * 1000,
+        diagnostics: { teamName: config.access.teamName, entry },
+      });
+      const started = host;
+      const binding = adapter!;
+      cleanup.push(binding.registerPolicy(), () => binding.dispose(), () => audit.flush());
+      await started.start();
+      cleanup.push(() => started.stop());
+      const admin = new AdminSocket(join(dir, 'admin.sock'), (request) => runAdmin(started, binding, request));
+      await admin.listen();
+      cleanup.push(() => admin.close());
+      const disposeRoute = ctx.connection.fetch.register(adminRoute(() => runtime.host, () => adapter));
+      cleanup.push(disposeRoute);
+      runtime.host = started;
+      runtime.problems = [];
+      ctx.logger?.info(`dsh-remote: serving https://${config.publicHost} on 127.0.0.1:${started.port}`);
+    } catch (error) {
+      runtime.problems = [`could not start: ${error instanceof Error ? error.message : String(error)}`];
+      ctx.logger?.error(`dsh-remote: ${runtime.problems[0]}`);
+    }
+    return async () => {
+      runtime.host = undefined;
+      for (const dispose of cleanup.reverse()) await dispose();
+    };
+  }, 'dsh-remote: host');
+}
