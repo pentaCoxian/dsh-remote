@@ -1,0 +1,22 @@
+{
+  "description": "Pairing QR URLs on the public link host; the payload is in the fragment.",
+  "valid": [
+    {
+      "url": "https://link.example.com/p#v=1&o=https%3A%2F%2Fdsh.example.com&h=host_TESTtestTESTtest01&c=chl_DBGVMP_CY2ze5GQSFdoB85fY&f=21e90171143732ce1072b50735e1de9a318853a87dc77a6bceba70fb3dc522c4&s=session-8f21",
+      "payload": {
+        "origin": "https://dsh.example.com",
+        "hostId": "host_TESTtestTESTtest01",
+        "challengeId": "chl_DBGVMP_CY2ze5GQSFdoB85fY",
+        "hostKeyFingerprint": "21e90171143732ce1072b50735e1de9a318853a87dc77a6bceba70fb3dc522c4",
+        "sessionId": "session-8f21"
+      }
+    }
+  ],
+  "invalid": [
+    "http://link.example.com/p#v=1",
+    "https://link.example.com/p?x=1#v=1&o=https%3A%2F%2Fdsh.example.com",
+    "https://link.example.com/p#v=2&o=https%3A%2F%2Fdsh.example.com&h=host_TESTtestTESTtest01&c=chl_DBGVMP_CY2ze5GQSFdoB85fY&f=21e90171143732ce1072b50735e1de9a318853a87dc77a6bceba70fb3dc522c4",
+    "https://link.example.com/p#v=1&o=https%3A%2F%2Fdsh.example.com%2Fpath&h=host_TESTtestTESTtest01&c=chl_DBGVMP_CY2ze5GQSFdoB85fY&f=21e90171143732ce1072b50735e1de9a318853a87dc77a6bceba70fb3dc522c4",
+    "https://link.example.com/p#v=1&o=https%3A%2F%2Fdsh.example.com&h=host_TESTtestTESTtest01&h=host_TESTtestTESTtest01&c=chl_DBGVMP_CY2ze5GQSFdoB85fY&f=21e90171143732ce1072b50735e1de9a318853a87dc77a6bceba70fb3dc522c4"
+  ]
+}

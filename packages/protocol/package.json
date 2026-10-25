@@ -1,0 +1,27 @@
+{
+  "name": "@dsh-remote/protocol",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "DSH Remote wire contract: canonical request signing, cursors, errors, pairing and schema validators",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "vectors": "node scripts/gen-vectors.ts"
+  },
+  "dependencies": {
+    "ajv": "8.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "5.9.3",
+    "vitest": "4.1.12"
+  }
+}

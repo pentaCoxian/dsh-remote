@@ -1,0 +1,24 @@
+{
+  "description": "Opaque cursor encoding: c1. + base64url(JSON {s, q}).",
+  "valid": [
+    {
+      "sessionId": "session-f438ec89-39f9-42dd-9ccb-8383a74ccce3",
+      "seq": 25,
+      "cursor": "c1.eyJzIjoic2Vzc2lvbi1mNDM4ZWM4OS0zOWY5LTQyZGQtOWNjYi04MzgzYTc0Y2NjZTMiLCJxIjoyNX0"
+    },
+    {
+      "sessionId": "ses_8f21",
+      "seq": -1,
+      "cursor": "c1.eyJzIjoic2VzXzhmMjEiLCJxIjotMX0"
+    }
+  ],
+  "invalid": [
+    "",
+    "c1.",
+    "c2.eyJzIjoieCIsInEiOjF9",
+    "c1.eyJzIjoieCIsInEiOi0yfQ",
+    "c1.eyJzIjoieCIsInEiOjEuNX0",
+    "c1.eyJzIjoieCIsInEiOjEsIngiOjF9",
+    "c1.!!"
+  ]
+}
