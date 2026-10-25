@@ -1,9 +1,9 @@
 {
   "description": "Canonical request strings (spec §5). Verify each signature with key.spki over canonical; body is UTF-8.",
   "key": {
-    "spki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEiuPY_6TKQN1MCHUwi90rd8hu02vk5xZSdbOG3LNM0vHiukrRlowMHJBPX_iSkj6gJCntdjuZwtD7hFv6qp_9Fw",
-    "pkcs8TestOnly": "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgr5KVv0X0WJWnO15CQEwmEvMiW7dVys2fJtAJW5mFA6ChRANCAASK49j_pMpA3UwIdTCL3St3yG7Ta-TnFlJ1s4bcs0zS8eK6StGWjAwckE9f-JKSPqAkKe12O5nC0PuEW_qqn_0X",
-    "fingerprint": "bd48993117c56763c6b7298a23a776bcc5059caf3fe715808a407cc2226422b7"
+    "spki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEmDhvpVQGr5rIGlPU5kGSolZs_5Nz1o6nqb8nJmHCPP4HbnywxohkOeJ_0zYzaEIt2mbU_N6AvVfcXoqHoJ_wiQ",
+    "pkcs8TestOnly": "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgBAPjtfjK2VzRfVH4lYa4Vkujal7YLUvqqDuGbu9G7kehRANCAASYOG-lVAavmsgaU9TmQZKiVmz_k3PWjqepvycmYcI8_gdufLDGiGQ54n_TNjNoQi3aZtT83oC9V9xeioegn_CJ",
+    "fingerprint": "05f223dffb238a5ebf79edc0cf61e534af1cca188bb301d4772803f105db5540"
   },
   "requests": [
     {
@@ -12,9 +12,9 @@
       "body": "",
       "bodySha256Hex": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "timestampMs": 1792900000000,
-      "nonce": "PhPR9fTXzhbO9SETmmVSGw",
-      "canonical": "DSH-REMOTE-V1\nGET\n/v1/meta\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n1792900000000\nPhPR9fTXzhbO9SETmmVSGw",
-      "signature": "MEYCIQDQawzTPHaEr9DikjDoQ9lzsb5vqeqM91Zq3IL7kb5_QQIhANAcUgqif8oy7XCyVewj4e9Iww1Yrhj8ZSysugPuIZ14"
+      "nonce": "Epd8ofN0j2ysCocIksJshQ",
+      "canonical": "DSH-REMOTE-V1\nGET\n/v1/meta\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n1792900000000\nEpd8ofN0j2ysCocIksJshQ",
+      "signature": "MEUCIQDSHisYfEbrCIfIy2p1DnT6QfLlGkRBNxSybHicGAGbQgIgdqi3N86MCCQNErIIYpuCqcfaEWCAdHO12OOIP3WCYaU"
     },
     {
       "method": "GET",
@@ -22,9 +22,9 @@
       "body": "",
       "bodySha256Hex": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "timestampMs": 1792900000001,
-      "nonce": "4diHWje9W-j6AKDKlfHSXA",
-      "canonical": "DSH-REMOTE-V1\nGET\n/v1/sessions?workspaceId=ws_1\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n1792900000001\n4diHWje9W-j6AKDKlfHSXA",
-      "signature": "MEYCIQDudONFixPd0XlkVKvHJL2VmJPBuEcVFrmDTIEYYtHldgIhAMDTJSR0Frt_OSvLgoy-6jfSTh7K59Lb8TLibONkcyeO"
+      "nonce": "Dlyt0sQjW_X59l9C2TQLUA",
+      "canonical": "DSH-REMOTE-V1\nGET\n/v1/sessions?workspaceId=ws_1\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n1792900000001\nDlyt0sQjW_X59l9C2TQLUA",
+      "signature": "MEQCIBh4jSkw7HHjVvjrDmgR4-TeIUxOcovkmA8EQ7Nb1-H8AiBywLntIpEdIxhOB0t3OO-BcADjmPmXviWHNlnW-Bzowg"
     },
     {
       "method": "POST",
@@ -32,9 +32,9 @@
       "body": "{\"clientRequestId\":\"req_d0af36\",\"text\":\"Check the latest test failures.\"}",
       "bodySha256Hex": "d127f6e62a00c96af35ac4f952c76cb82e0146a89a1af39ca5352e9e77da586f",
       "timestampMs": 1792900000002,
-      "nonce": "mBREFWGfCW2Ddm5U3rU4YQ",
-      "canonical": "DSH-REMOTE-V1\nPOST\n/v1/sessions/session-8f21/prompts\nd127f6e62a00c96af35ac4f952c76cb82e0146a89a1af39ca5352e9e77da586f\n1792900000002\nmBREFWGfCW2Ddm5U3rU4YQ",
-      "signature": "MEUCIGqqby-ICpUyZsu3LYbTFu_XYH7Wq6q0V-pP3f6PUQchAiEA3fDlSkkDBMJqBdRS6oCfW8JjcMLe7xcLvmJNz_cq8l8"
+      "nonce": "aGSGquV56jm8EjKbhaVRsg",
+      "canonical": "DSH-REMOTE-V1\nPOST\n/v1/sessions/session-8f21/prompts\nd127f6e62a00c96af35ac4f952c76cb82e0146a89a1af39ca5352e9e77da586f\n1792900000002\naGSGquV56jm8EjKbhaVRsg",
+      "signature": "MEQCICfN2Dc_AEh1YVv6XfPUt9QbexdCaWNtTpdnGpnvUPbIAiBJgC6CyPK1aIq0_0_zDG_kv0PFkzsuHf7Br8qEfZao3Q"
     },
     {
       "method": "POST",
@@ -42,9 +42,9 @@
       "body": "{\"clientRequestId\":\"req_unicode1\",\"text\":\"テストの失敗を確認して 🚀\"}",
       "bodySha256Hex": "84325b2f36af4f76392db06354ad017cf514ce42a12454f5b9b3732d511dd5de",
       "timestampMs": 1792900000003,
-      "nonce": "1cSUMUCqqaacQ35QoEnKEw",
-      "canonical": "DSH-REMOTE-V1\nPOST\n/v1/sessions/session-8f21/prompts\n84325b2f36af4f76392db06354ad017cf514ce42a12454f5b9b3732d511dd5de\n1792900000003\n1cSUMUCqqaacQ35QoEnKEw",
-      "signature": "MEYCIQC6BT5mLcq761OJ-wqdovWlsJeJbYdVMT1FfX8OJ_KPQQIhAO9KOTlJ5ZGmzGRKVermhh8Ph_QRdhJoUHHJ8OrYpcbO"
+      "nonce": "0LsoYNYrD9cMijX5itipeg",
+      "canonical": "DSH-REMOTE-V1\nPOST\n/v1/sessions/session-8f21/prompts\n84325b2f36af4f76392db06354ad017cf514ce42a12454f5b9b3732d511dd5de\n1792900000003\n0LsoYNYrD9cMijX5itipeg",
+      "signature": "MEUCICE-4lDNwIxlOmuDCp1c6uTFH4VJViv3kIidpI66PGg4AiEAjYcZIKObAcBJ7-VLrvWLzZ2RZHpfm6q02v1McduRixk"
     },
     {
       "method": "GET",
@@ -52,9 +52,9 @@
       "body": "",
       "bodySha256Hex": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "timestampMs": 1792900000004,
-      "nonce": "_qxtNFHURUtevzGLXtBBWw",
-      "canonical": "DSH-REMOTE-V1\nGET\n/v1/events\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n1792900000004\n_qxtNFHURUtevzGLXtBBWw",
-      "signature": "MEYCIQDWz4RwN3bh2A7DIMoCSjdmLDaqYIQFpgCJKh6iPoM89wIhALE7hSE0hvQgbmQy3pODKhchpCL87zGETZxYZm1xW2kf"
+      "nonce": "p2ysGQRBMoAK9uxNUcR20A",
+      "canonical": "DSH-REMOTE-V1\nGET\n/v1/events\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n1792900000004\np2ysGQRBMoAK9uxNUcR20A",
+      "signature": "MEUCIBUEj4wTbdmaiYfhlIdR7bjpGxKQuKxbNKhUDVWs4ckXAiEAxaV0IKadSWdkMlU2AqDtdkbL8ShvKBm9YuZV8wFUtqM"
     }
   ]
 }

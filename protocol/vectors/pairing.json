@@ -1,22 +1,45 @@
 {
-  "description": "Pairing QR URLs on the public link host; the payload is in the fragment.",
+  "description": "Pairing QR text v2. The ticket decodes to ticket.endpointId (+ relayUrl, directAddresses for the full one).",
+  "ticket": {
+    "endpointId": "2152f8d19b791d24453242e15f2eab6cb7cffa7b6a5ed30097960e069881db12",
+    "relayUrl": "https://nrt1.relay.dshremote.pentacoxian.dev/",
+    "directAddresses": [
+      "192.168.1.20:51820"
+    ],
+    "full": "endpointaaqvf6grtn4r2jcfgjbocxzovnwlpt72pnvf5uyas6la4buyqhnreaqafvuhi5dqom5c6l3ooj2dcltsmvwgc6jomrzwq4tfnvxxizjoobsw45dbmnxxq2lbnyxgizlwf4aqbqfiaekozfad",
+    "bare": "endpointaaqvf6grtn4r2jcfgjbocxzovnwlpt72pnvf5uyas6la4buyqhnreaa"
+  },
   "valid": [
     {
-      "url": "https://link.example.com/p#v=1&o=https%3A%2F%2Fdsh.example.com&h=host_TESTtestTESTtest01&c=chl_DBGVMP_CY2ze5GQSFdoB85fY&f=21e90171143732ce1072b50735e1de9a318853a87dc77a6bceba70fb3dc522c4&s=session-8f21",
+      "url": "dshremote://pair?v=2&t=endpointaaqvf6grtn4r2jcfgjbocxzovnwlpt72pnvf5uyas6la4buyqhnreaqafvuhi5dqom5c6l3ooj2dcltsmvwgc6jomrzwq4tfnvxxizjoobsw45dbmnxxq2lbnyxgizlwf4aqbqfiaekozfad&c=chl_9ROaPzUriyxKlt48IhCz8NIQ&s=session-8f21&n=Home+Lab+%E7%A0%94%E7%A9%B6%E5%AE%A4",
       "payload": {
-        "origin": "https://dsh.example.com",
-        "hostId": "host_TESTtestTESTtest01",
-        "challengeId": "chl_DBGVMP_CY2ze5GQSFdoB85fY",
-        "hostKeyFingerprint": "21e90171143732ce1072b50735e1de9a318853a87dc77a6bceba70fb3dc522c4",
-        "sessionId": "session-8f21"
+        "ticket": "endpointaaqvf6grtn4r2jcfgjbocxzovnwlpt72pnvf5uyas6la4buyqhnreaqafvuhi5dqom5c6l3ooj2dcltsmvwgc6jomrzwq4tfnvxxizjoobsw45dbmnxxq2lbnyxgizlwf4aqbqfiaekozfad",
+        "challengeId": "chl_9ROaPzUriyxKlt48IhCz8NIQ",
+        "sessionId": "session-8f21",
+        "hostName": "Home Lab 研究室"
+      }
+    },
+    {
+      "url": "dshremote://pair?v=2&t=endpointaaqvf6grtn4r2jcfgjbocxzovnwlpt72pnvf5uyas6la4buyqhnreaa&c=chl_9ROaPzUriyxKlt48IhCz8NIQ",
+      "payload": {
+        "ticket": "endpointaaqvf6grtn4r2jcfgjbocxzovnwlpt72pnvf5uyas6la4buyqhnreaa",
+        "challengeId": "chl_9ROaPzUriyxKlt48IhCz8NIQ"
       }
     }
   ],
   "invalid": [
-    "http://link.example.com/p#v=1",
-    "https://link.example.com/p?x=1#v=1&o=https%3A%2F%2Fdsh.example.com",
-    "https://link.example.com/p#v=2&o=https%3A%2F%2Fdsh.example.com&h=host_TESTtestTESTtest01&c=chl_DBGVMP_CY2ze5GQSFdoB85fY&f=21e90171143732ce1072b50735e1de9a318853a87dc77a6bceba70fb3dc522c4",
-    "https://link.example.com/p#v=1&o=https%3A%2F%2Fdsh.example.com%2Fpath&h=host_TESTtestTESTtest01&c=chl_DBGVMP_CY2ze5GQSFdoB85fY&f=21e90171143732ce1072b50735e1de9a318853a87dc77a6bceba70fb3dc522c4",
-    "https://link.example.com/p#v=1&o=https%3A%2F%2Fdsh.example.com&h=host_TESTtestTESTtest01&h=host_TESTtestTESTtest01&c=chl_DBGVMP_CY2ze5GQSFdoB85fY&f=21e90171143732ce1072b50735e1de9a318853a87dc77a6bceba70fb3dc522c4"
+    "dshremote://pair?v=1&t=endpointaaqvf6grtn4r2jcfgjbocxzovnwlpt72pnvf5uyas6la4buyqhnreaqafvuhi5dqom5c6l3ooj2dcltsmvwgc6jomrzwq4tfnvxxizjoobsw45dbmnxxq2lbnyxgizlwf4aqbqfiaekozfad&c=chl_9ROaPzUriyxKlt48IhCz8NIQ",
+    "dshremote://pair?t=endpointaaqvf6grtn4r2jcfgjbocxzovnwlpt72pnvf5uyas6la4buyqhnreaqafvuhi5dqom5c6l3ooj2dcltsmvwgc6jomrzwq4tfnvxxizjoobsw45dbmnxxq2lbnyxgizlwf4aqbqfiaekozfad&c=chl_9ROaPzUriyxKlt48IhCz8NIQ",
+    "dshremote://other?v=2&t=endpointaaqvf6grtn4r2jcfgjbocxzovnwlpt72pnvf5uyas6la4buyqhnreaqafvuhi5dqom5c6l3ooj2dcltsmvwgc6jomrzwq4tfnvxxizjoobsw45dbmnxxq2lbnyxgizlwf4aqbqfiaekozfad&c=chl_9ROaPzUriyxKlt48IhCz8NIQ",
+    "dshremote://pair/x?v=2&t=endpointaaqvf6grtn4r2jcfgjbocxzovnwlpt72pnvf5uyas6la4buyqhnreaqafvuhi5dqom5c6l3ooj2dcltsmvwgc6jomrzwq4tfnvxxizjoobsw45dbmnxxq2lbnyxgizlwf4aqbqfiaekozfad&c=chl_9ROaPzUriyxKlt48IhCz8NIQ",
+    "dshremote://pair?v=2&t=endpointaaqvf6grtn4r2jcfgjbocxzovnwlpt72pnvf5uyas6la4buyqhnreaqafvuhi5dqom5c6l3ooj2dcltsmvwgc6jomrzwq4tfnvxxizjoobsw45dbmnxxq2lbnyxgizlwf4aqbqfiaekozfad&c=chl_9ROaPzUriyxKlt48IhCz8NIQ#frag",
+    "https://pair?v=2&t=endpointaaqvf6grtn4r2jcfgjbocxzovnwlpt72pnvf5uyas6la4buyqhnreaqafvuhi5dqom5c6l3ooj2dcltsmvwgc6jomrzwq4tfnvxxizjoobsw45dbmnxxq2lbnyxgizlwf4aqbqfiaekozfad&c=chl_9ROaPzUriyxKlt48IhCz8NIQ",
+    "dshremote://pair?v=2&t=ENDPOINTAAQVF6GRTN4R2JCFGJBOCXZOVNWLPT72PNVF5UYAS6LA4BUYQHNREAQAFVUHI5DQOM5C6L3OOJ2DCLTSMVWGC6JOMRZWQ4TFNVXXIZJOOBSW45DBMNXXQ2LBNYXGIZLWF4AQBQFIAEKOZFAD&c=chl_9ROaPzUriyxKlt48IhCz8NIQ",
+    "dshremote://pair?v=2&t=nodeaaqvf6grtn4r2jcfgjbocxzovnwlpt72pnvf5uyas6la4buyqhnreaqafvuhi5dqom5c6l3ooj2dcltsmvwgc6jomrzwq4tfnvxxizjoobsw45dbmnxxq2lbnyxgizlwf4aqbqfiaekozfad&c=chl_9ROaPzUriyxKlt48IhCz8NIQ",
+    "dshremote://pair?v=2&t=endpointaaqvf6grtn4r2jcfgjbocxzovnwlpt72pnvf5uyas6la4buyqhnreaqafvuhi5dqom5c6l3ooj2dcltsmvwgc6jomrzwq4tfnvxxizjoobsw45dbmnxxq2lbnyxgizlwf4aqbqfiaekozfad&c=chl_short",
+    "dshremote://pair?v=2&t=endpointaaqvf6grtn4r2jcfgjbocxzovnwlpt72pnvf5uyas6la4buyqhnreaqafvuhi5dqom5c6l3ooj2dcltsmvwgc6jomrzwq4tfnvxxizjoobsw45dbmnxxq2lbnyxgizlwf4aqbqfiaekozfad&c=chl_9ROaPzUriyxKlt48IhCz8NIQ&x=1",
+    "dshremote://pair?v=2&t=endpointaaqvf6grtn4r2jcfgjbocxzovnwlpt72pnvf5uyas6la4buyqhnreaqafvuhi5dqom5c6l3ooj2dcltsmvwgc6jomrzwq4tfnvxxizjoobsw45dbmnxxq2lbnyxgizlwf4aqbqfiaekozfad&c=chl_9ROaPzUriyxKlt48IhCz8NIQ&c=chl_9ROaPzUriyxKlt48IhCz8NIQ",
+    "dshremote://pair?v=2&t=endpointaaqvf6grtn4r2jcfgjbocxzovnwlpt72pnvf5uyas6la4buyqhnreaqafvuhi5dqom5c6l3ooj2dcltsmvwgc6jomrzwq4tfnvxxizjoobsw45dbmnxxq2lbnyxgizlwf4aqbqfiaekozfad&c=chl_9ROaPzUriyxKlt48IhCz8NIQ&n=tab%09here",
+    "dshremote://pair?v=2&t=endpointaaqvf6grtn4r2jcfgjbocxzovnwlpt72pnvf5uyas6la4buyqhnreaqafvuhi5dqom5c6l3ooj2dcltsmvwgc6jomrzwq4tfnvxxizjoobsw45dbmnxxq2lbnyxgizlwf4aqbqfiaekozfad&c=chl_9ROaPzUriyxKlt48IhCz8NIQ&n=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
   ]
 }

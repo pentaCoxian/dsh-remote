@@ -1,7 +1,7 @@
 /** Wire protocol major version carried in `X-DSH-Protocol` and every frame's `v`. */
 export const PROTOCOL_VERSION = 1;
-/** Minor version of the v1 contract this package implements. */
-export const PROTOCOL_MINOR = 0;
+/** Minor version of the v1 contract this package implements (1: iroh transport, unsigned grants). */
+export const PROTOCOL_MINOR = 1;
 
 /** Request-proof headers (spec §5), lowercase as Node exposes them. */
 export const HEADERS = {
@@ -10,7 +10,6 @@ export const HEADERS = {
   timestamp: 'x-dsh-timestamp',
   nonce: 'x-dsh-nonce',
   signature: 'x-dsh-signature',
-  accessAssertion: 'cf-access-jwt-assertion',
 } as const;
 
 /** Device id sent by a phone that has no grant yet (pair redeem and pair status). */

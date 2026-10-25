@@ -4,12 +4,12 @@ import {
   canonicalRequestString,
   decodeCursor,
   encodeCursor,
-  grantSigningString,
+  ENDPOINT_ID,
   importP256PublicKey,
   parsePairingUrl,
   sha256Hex,
+  TICKET,
   verifyP256Signature,
-  type GrantFields,
   type PairingPayload,
 } from '../src/index.ts';
 
@@ -21,17 +21,12 @@ interface SigningVector {
   key: VectorKey;
   requests: { method: string; target: string; body: string; bodySha256Hex: string; timestampMs: number; nonce: string; canonical: string; signature: string }[];
 }
-interface GrantVector {
-  hostKey: VectorKey;
-  grant: GrantFields;
-  signingString: string;
-  signature: string;
-}
 interface CursorVector {
   valid: { sessionId: string; seq: number; cursor: string }[];
   invalid: string[];
 }
 interface PairingVector {
+  ticket: { endpointId: string; full: string; bare: string };
   valid: { url: string; payload: PairingPayload }[];
   invalid: string[];
 }
@@ -74,19 +69,6 @@ describe('signing vectors', () => {
   });
 });
 
-describe('grant vector', () => {
-  const { hostKey, grant, signingString, signature } = vector<GrantVector>('grant');
-
-  it('sorts scopes into the signing string and verifies', () => {
-    expect(grantSigningString(grant)).toBe(signingString);
-    expect(signingString.split('\n')[5]).toBe('approval:read,approval:respond,host:read,session:read,session:write,workspace:read');
-    const key = importP256PublicKey(hostKey.spki)!;
-    expect(key.fingerprint).toBe(hostKey.fingerprint);
-    expect(verifyP256Signature(key.key, signingString, signature)).toBe(true);
-    expect(verifyP256Signature(key.key, grantSigningString({ ...grant, deviceId: 'dev_SOMEoneELSEentirely1' }), signature)).toBe(false);
-  });
-});
-
 describe('cursor vectors', () => {
   const { valid, invalid } = vector<CursorVector>('cursor');
 
@@ -105,11 +87,19 @@ describe('cursor vectors', () => {
 });
 
 describe('pairing vectors', () => {
-  const { valid, invalid } = vector<PairingVector>('pairing');
+  const { ticket, valid, invalid } = vector<PairingVector>('pairing');
 
-  it('parses the QR URL back into its payload', () => {
-    expect(parsePairingUrl(valid[0]!.url)).toEqual(valid[0]!.payload);
+  it('carries real ticket shapes', () => {
+    expect(ticket.endpointId).toMatch(ENDPOINT_ID);
+    expect(ticket.full).toMatch(TICKET);
+    expect(ticket.bare).toMatch(TICKET);
   });
+
+  for (const { url, payload } of valid) {
+    it(`parses ${url.slice(0, 48)}… back into its payload`, () => {
+      expect(parsePairingUrl(url)).toEqual(payload);
+    });
+  }
 
   for (const url of invalid) {
     it(`rejects ${url}`, () => {

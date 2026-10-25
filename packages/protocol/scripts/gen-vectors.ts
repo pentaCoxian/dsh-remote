@@ -5,7 +5,7 @@ import { generateKeyPairSync, randomBytes, sign } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { canonicalRequestString, sha256Hex } from '../src/signing.ts';
 import { encodeCursor } from '../src/cursor.ts';
-import { buildPairingUrl, grantSigningString } from '../src/pairing.ts';
+import { buildPairingUrl } from '../src/pairing.ts';
 import { spkiFingerprint } from '../src/keys.ts';
 
 const out = new URL('../../../protocol/vectors/', import.meta.url);
@@ -46,24 +46,6 @@ writeFileSync(new URL('signing.json', out), `${JSON.stringify({
   requests,
 }, null, 2)}\n`);
 
-const host = keyPair();
-const grant = {
-  hostId: 'host_TESTtestTESTtest01',
-  pairingRequestId: `pair_${randomBytes(18).toString('base64url')}`,
-  deviceId: 'dev_TESTtestTESTtest01',
-  deviceKeyFingerprint: device.json.fingerprint,
-  scopes: ['session:write', 'host:read', 'approval:respond', 'session:read', 'approval:read', 'workspace:read'] as const,
-  expiresAt: 1_800_676_000_000,
-};
-const grantString = grantSigningString(grant);
-writeFileSync(new URL('grant.json', out), `${JSON.stringify({
-  description: 'Host-signed device grant. signingString sorts scopes; verify signature with hostKey.spki.',
-  hostKey: host.json,
-  grant,
-  signingString: grantString,
-  signature: signText(host.privateKey, grantString),
-}, null, 2)}\n`);
-
 writeFileSync(new URL('cursor.json', out), `${JSON.stringify({
   description: 'Opaque cursor encoding: c1. + base64url(JSON {s, q}).',
   valid: [
@@ -73,23 +55,40 @@ writeFileSync(new URL('cursor.json', out), `${JSON.stringify({
   invalid: ['', 'c1.', 'c2.eyJzIjoieCIsInEiOjF9', 'c1.eyJzIjoieCIsInEiOi0yfQ', 'c1.eyJzIjoieCIsInEiOjEuNX0', 'c1.eyJzIjoieCIsInEiOjEsIngiOjF9', 'c1.!!'],
 }, null, 2)}\n`);
 
-const payload = {
-  origin: 'https://dsh.example.com',
-  hostId: grant.hostId,
-  challengeId: `chl_${randomBytes(18).toString('base64url')}`,
-  hostKeyFingerprint: host.json.fingerprint,
-  sessionId: 'session-8f21',
+// Real iroh tickets for the test-only seed 0x42 * 32 (EndpointId below), made with
+// @number0/iroh 1.2.0: EndpointTicket.fromAddr(new EndpointAddr(id, relayUrl, addrs)).
+const ticket = {
+  endpointId: '2152f8d19b791d24453242e15f2eab6cb7cffa7b6a5ed30097960e069881db12',
+  relayUrl: 'https://nrt1.relay.dshremote.pentacoxian.dev/',
+  directAddresses: ['192.168.1.20:51820'],
+  full: 'endpointaaqvf6grtn4r2jcfgjbocxzovnwlpt72pnvf5uyas6la4buyqhnreaqafvuhi5dqom5c6l3ooj2dcltsmvwgc6jomrzwq4tfnvxxizjoobsw45dbmnxxq2lbnyxgizlwf4aqbqfiaekozfad',
+  bare: 'endpointaaqvf6grtn4r2jcfgjbocxzovnwlpt72pnvf5uyas6la4buyqhnreaa',
 };
+const challengeId = `chl_${randomBytes(18).toString('base64url')}`;
+const payloads = [
+  { ticket: ticket.full, challengeId, sessionId: 'session-8f21', hostName: 'Home Lab 研究室' },
+  { ticket: ticket.bare, challengeId },
+];
+const query = (entries: Record<string, string>) => new URLSearchParams(entries).toString();
 writeFileSync(new URL('pairing.json', out), `${JSON.stringify({
-  description: 'Pairing QR URLs on the public link host; the payload is in the fragment.',
-  valid: [{ url: buildPairingUrl('https://link.example.com', payload), payload }],
+  description: 'Pairing QR text v2. The ticket decodes to ticket.endpointId (+ relayUrl, directAddresses for the full one).',
+  ticket,
+  valid: payloads.map((payload) => ({ url: buildPairingUrl(payload), payload })),
   invalid: [
-    'http://link.example.com/p#v=1',
-    `https://link.example.com/p?x=1#v=1&o=${encodeURIComponent(payload.origin)}`,
-    `https://link.example.com/p#v=2&o=${encodeURIComponent(payload.origin)}&h=${payload.hostId}&c=${payload.challengeId}&f=${payload.hostKeyFingerprint}`,
-    `https://link.example.com/p#v=1&o=${encodeURIComponent('https://dsh.example.com/path')}&h=${payload.hostId}&c=${payload.challengeId}&f=${payload.hostKeyFingerprint}`,
-    `https://link.example.com/p#v=1&o=${encodeURIComponent(payload.origin)}&h=${payload.hostId}&h=${payload.hostId}&c=${payload.challengeId}&f=${payload.hostKeyFingerprint}`,
+    `dshremote://pair?${query({ v: '1', t: ticket.full, c: challengeId })}`,
+    `dshremote://pair?${query({ t: ticket.full, c: challengeId })}`,
+    `dshremote://other?${query({ v: '2', t: ticket.full, c: challengeId })}`,
+    `dshremote://pair/x?${query({ v: '2', t: ticket.full, c: challengeId })}`,
+    `dshremote://pair?${query({ v: '2', t: ticket.full, c: challengeId })}#frag`,
+    `https://pair?${query({ v: '2', t: ticket.full, c: challengeId })}`,
+    `dshremote://pair?${query({ v: '2', t: ticket.full.toUpperCase(), c: challengeId })}`,
+    `dshremote://pair?${query({ v: '2', t: 'node' + ticket.full.slice(8), c: challengeId })}`,
+    `dshremote://pair?${query({ v: '2', t: ticket.full, c: 'chl_short' })}`,
+    `dshremote://pair?${query({ v: '2', t: ticket.full, c: challengeId, x: '1' })}`,
+    `dshremote://pair?${query({ v: '2', t: ticket.full, c: challengeId })}&c=${challengeId}`,
+    `dshremote://pair?${query({ v: '2', t: ticket.full, c: challengeId, n: 'tab\there' })}`,
+    `dshremote://pair?${query({ v: '2', t: ticket.full, c: challengeId, n: 'x'.repeat(65) })}`,
   ],
 }, null, 2)}\n`);
 
-console.log('wrote protocol/vectors/{signing,grant,cursor,pairing}.json');
+console.log('wrote protocol/vectors/{signing,cursor,pairing}.json');

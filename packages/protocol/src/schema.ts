@@ -26,6 +26,7 @@ export type SchemaName =
   | 'PairRedeemResponse'
   | 'PairStatusResponse'
   | 'DeviceGrant'
+  | 'HostAddress'
   | 'Lease'
   | 'ServerFrame';
 

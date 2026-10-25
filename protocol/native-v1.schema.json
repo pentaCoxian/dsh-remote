@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://dsh-remote.invalid/protocol/native-v1.schema.json",
   "title": "DSH Remote native protocol v1",
-  "description": "Authoritative wire contract between the DSH Remote plugin (host) and native clients. Client-to-host bodies are closed (additionalProperties false); host-to-client objects are open so clients ignore unknown fields and kinds.",
+  "description": "Authoritative wire contract (protocol 1.1, carried over an iroh QUIC connection) between the DSH Remote plugin (host) and native clients. Client-to-host bodies are closed (additionalProperties false); host-to-client objects are open so clients ignore unknown fields and kinds.",
   "$defs": {
     "sessionId": {
       "type": "string",
@@ -21,8 +21,14 @@
       "pattern": "^dev_[A-Za-z0-9_-]{16,64}$"
     },
     "hostId": {
+      "description": "iroh EndpointId of the host: its Ed25519 public key, lowercase hex. QUIC authenticates it on every connection.",
       "type": "string",
-      "pattern": "^host_[A-Za-z0-9_-]{16,64}$"
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "ticket": {
+      "description": "iroh EndpointTicket (endpoint id plus relay and direct addresses).",
+      "type": "string",
+      "pattern": "^endpoint[a-z2-7]{52,1500}$"
     },
     "clientRequestId": {
       "type": "string",
@@ -612,8 +618,7 @@
       "type": "object",
       "required": [
         "pairingRequestId",
-        "expiresAt",
-        "hostKey"
+        "expiresAt"
       ],
       "properties": {
         "pairingRequestId": {
@@ -621,21 +626,6 @@
         },
         "expiresAt": {
           "$ref": "#/$defs/timestampMs"
-        },
-        "hostKey": {
-          "type": "object",
-          "required": [
-            "publicKey",
-            "fingerprint"
-          ],
-          "properties": {
-            "publicKey": {
-              "$ref": "#/$defs/spki"
-            },
-            "fingerprint": {
-              "$ref": "#/$defs/fingerprint"
-            }
-          }
         }
       }
     },
@@ -659,15 +649,14 @@
       }
     },
     "DeviceGrant": {
-      "description": "Host-signed grant; signature covers grantSigningString() in packages/protocol.",
+      "description": "Device grant. It is unsigned: it arrives over the QUIC connection that authenticated hostId.",
       "type": "object",
       "required": [
         "hostId",
         "deviceId",
         "deviceKeyFingerprint",
         "scopes",
-        "expiresAt",
-        "signature"
+        "expiresAt"
       ],
       "properties": {
         "hostId": {
@@ -687,10 +676,43 @@
         },
         "expiresAt": {
           "$ref": "#/$defs/timestampMs"
+        }
+      }
+    },
+    "HostAddress": {
+      "description": "GET /v1/host/address: where the host can be reached now, so the phone can refresh the ticket it cached from the QR.",
+      "type": "object",
+      "required": [
+        "v",
+        "hostId",
+        "ticket",
+        "relayUrl",
+        "serverTime"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
         },
-        "signature": {
-          "type": "string",
-          "pattern": "^[A-Za-z0-9_-]{80,120}$"
+        "hostId": {
+          "$ref": "#/$defs/hostId"
+        },
+        "ticket": {
+          "$ref": "#/$defs/ticket"
+        },
+        "relayUrl": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "maxLength": 512,
+              "pattern": "^https://"
+            }
+          ]
+        },
+        "serverTime": {
+          "$ref": "#/$defs/timestampMs"
         }
       }
     },
