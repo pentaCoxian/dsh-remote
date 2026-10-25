@@ -4,61 +4,167 @@
   "title": "DSH Remote native protocol v1",
   "description": "Authoritative wire contract between the DSH Remote plugin (host) and native clients. Client-to-host bodies are closed (additionalProperties false); host-to-client objects are open so clients ignore unknown fields and kinds.",
   "$defs": {
-    "sessionId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[\\x21-\\x7e]+$" },
-    "workspaceId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[\\x21-\\x7e]+$" },
-    "deviceId": { "type": "string", "pattern": "^dev_[A-Za-z0-9_-]{16,64}$" },
-    "hostId": { "type": "string", "pattern": "^host_[A-Za-z0-9_-]{16,64}$" },
-    "clientRequestId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{6,80}$" },
-    "turnId": { "type": "string", "pattern": "^turn_[A-Za-z0-9_-]{6,96}$" },
-    "approvalId": { "type": "string", "pattern": "^apr_[A-Za-z0-9_-]{6,96}$" },
-    "challengeId": { "type": "string", "pattern": "^chl_[A-Za-z0-9_-]{22,64}$" },
-    "pairingRequestId": { "type": "string", "pattern": "^pair_[A-Za-z0-9_-]{22,64}$" },
-    "cursor": { "type": "string", "pattern": "^c1\\.[A-Za-z0-9_-]{4,600}$" },
-    "spki": { "description": "base64url DER SubjectPublicKeyInfo of a P-256 key", "type": "string", "pattern": "^[A-Za-z0-9_-]{80,200}$" },
-    "fingerprint": { "description": "lowercase hex SHA-256 of the SPKI DER", "type": "string", "pattern": "^[0-9a-f]{64}$" },
-    "timestampMs": { "type": "integer", "minimum": 0 },
-    "scope": { "enum": ["host:read", "workspace:read", "session:read", "session:write", "approval:read", "approval:respond"] },
-
+    "sessionId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[\\x21-\\x7e]+$"
+    },
+    "workspaceId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[\\x21-\\x7e]+$"
+    },
+    "deviceId": {
+      "type": "string",
+      "pattern": "^dev_[A-Za-z0-9_-]{16,64}$"
+    },
+    "hostId": {
+      "type": "string",
+      "pattern": "^host_[A-Za-z0-9_-]{16,64}$"
+    },
+    "clientRequestId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{6,80}$"
+    },
+    "turnId": {
+      "type": "string",
+      "pattern": "^turn_[A-Za-z0-9_-]{6,96}$"
+    },
+    "approvalId": {
+      "type": "string",
+      "pattern": "^apr_[A-Za-z0-9_-]{6,96}$"
+    },
+    "challengeId": {
+      "type": "string",
+      "pattern": "^chl_[A-Za-z0-9_-]{22,64}$"
+    },
+    "pairingRequestId": {
+      "type": "string",
+      "pattern": "^pair_[A-Za-z0-9_-]{22,64}$"
+    },
+    "cursor": {
+      "type": "string",
+      "pattern": "^c1\\.[A-Za-z0-9_-]{4,600}$"
+    },
+    "spki": {
+      "description": "base64url DER SubjectPublicKeyInfo of a P-256 key",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{80,200}$"
+    },
+    "fingerprint": {
+      "description": "lowercase hex SHA-256 of the SPKI DER",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "timestampMs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "scope": {
+      "enum": [
+        "host:read",
+        "workspace:read",
+        "session:read",
+        "session:write",
+        "approval:read",
+        "approval:respond"
+      ]
+    },
     "PromptRequest": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["clientRequestId", "text"],
+      "required": [
+        "clientRequestId",
+        "text"
+      ],
       "properties": {
-        "clientRequestId": { "$ref": "#/$defs/clientRequestId" },
-        "text": { "type": "string", "minLength": 1, "maxLength": 16384 }
+        "clientRequestId": {
+          "$ref": "#/$defs/clientRequestId"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16384
+        }
       }
     },
     "CancelRequest": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["turnId"],
-      "properties": { "turnId": { "$ref": "#/$defs/turnId" } }
+      "required": [
+        "turnId"
+      ],
+      "properties": {
+        "turnId": {
+          "$ref": "#/$defs/turnId"
+        }
+      }
     },
     "ApprovalResponseRequest": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["decision", "expectedRevision"],
+      "required": [
+        "decision",
+        "expectedRevision"
+      ],
       "properties": {
-        "decision": { "enum": ["allow_once", "deny"] },
-        "expectedRevision": { "type": "integer", "minimum": 1 }
+        "decision": {
+          "enum": [
+            "allow_once",
+            "deny"
+          ]
+        },
+        "expectedRevision": {
+          "type": "integer",
+          "minimum": 1
+        }
       }
     },
     "PairRedeemRequest": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["challengeId", "publicKey", "deviceLabel", "platform", "hardwareBacked"],
+      "required": [
+        "challengeId",
+        "publicKey",
+        "deviceLabel",
+        "platform",
+        "hardwareBacked"
+      ],
       "properties": {
-        "challengeId": { "$ref": "#/$defs/challengeId" },
-        "publicKey": { "$ref": "#/$defs/spki" },
-        "deviceLabel": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[^\\x00-\\x1f\\x7f]+$" },
-        "platform": { "enum": ["android", "ios", "other"] },
-        "hardwareBacked": { "type": "boolean" }
+        "challengeId": {
+          "$ref": "#/$defs/challengeId"
+        },
+        "publicKey": {
+          "$ref": "#/$defs/spki"
+        },
+        "deviceLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[^\\x00-\\x1f\\x7f]+$"
+        },
+        "platform": {
+          "enum": [
+            "android",
+            "ios",
+            "other"
+          ]
+        },
+        "hardwareBacked": {
+          "type": "boolean"
+        }
       }
     },
     "LeaseRequest": {
       "type": "object",
       "additionalProperties": false,
-      "properties": { "takeover": { "type": "boolean" } }
+      "properties": {
+        "takeover": {
+          "type": "boolean"
+        }
+      }
     },
     "ClientFrame": {
       "description": "Text frames a client sends on /v1/events after the authenticated upgrade.",
@@ -66,109 +172,258 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["op", "sessionId"],
+          "required": [
+            "op",
+            "sessionId"
+          ],
           "properties": {
-            "op": { "const": "subscribe" },
-            "sessionId": { "$ref": "#/$defs/sessionId" },
-            "after": { "$ref": "#/$defs/cursor" }
+            "op": {
+              "const": "subscribe"
+            },
+            "sessionId": {
+              "$ref": "#/$defs/sessionId"
+            },
+            "after": {
+              "$ref": "#/$defs/cursor"
+            }
           }
         },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["op", "sessionId"],
+          "required": [
+            "op",
+            "sessionId"
+          ],
           "properties": {
-            "op": { "const": "unsubscribe" },
-            "sessionId": { "$ref": "#/$defs/sessionId" }
+            "op": {
+              "const": "unsubscribe"
+            },
+            "sessionId": {
+              "$ref": "#/$defs/sessionId"
+            }
           }
         },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["op"],
-          "properties": { "op": { "const": "ping" } }
+          "required": [
+            "op"
+          ],
+          "properties": {
+            "op": {
+              "const": "ping"
+            }
+          }
         }
       ]
     },
-
     "ErrorEnvelope": {
       "type": "object",
-      "required": ["v", "error"],
+      "required": [
+        "v",
+        "error"
+      ],
       "properties": {
-        "v": { "const": 1 },
+        "v": {
+          "const": 1
+        },
         "error": {
           "type": "object",
-          "required": ["code", "message", "requestId", "retryable"],
+          "required": [
+            "code",
+            "message",
+            "requestId",
+            "retryable"
+          ],
           "properties": {
-            "code": { "$ref": "#/$defs/errorCode" },
-            "message": { "type": "string", "maxLength": 200 },
-            "requestId": { "type": "string" },
-            "retryable": { "type": "boolean" },
-            "serverTime": { "$ref": "#/$defs/timestampMs" }
+            "code": {
+              "$ref": "#/$defs/errorCode"
+            },
+            "message": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "requestId": {
+              "type": "string"
+            },
+            "retryable": {
+              "type": "boolean"
+            },
+            "serverTime": {
+              "$ref": "#/$defs/timestampMs"
+            }
           }
         }
       }
     },
     "errorCode": {
       "enum": [
-        "BAD_REQUEST", "UNAUTHENTICATED", "ACCESS_DENIED", "DEVICE_UNPAIRED", "DEVICE_REVOKED",
-        "SIGNATURE_INVALID", "TIMESTAMP_SKEW", "NONCE_REPLAYED", "SCOPE_DENIED", "NOT_FOUND",
-        "METHOD_NOT_ALLOWED", "IDEMPOTENCY_CONFLICT", "APPROVAL_STALE", "LEASE_HELD", "LEASE_REQUIRED",
-        "TURN_NOT_ACTIVE", "SESSION_NOT_PUBLISHED", "CHALLENGE_INVALID", "PAYLOAD_TOO_LARGE",
-        "UNSUPPORTED_MEDIA_TYPE", "PROTOCOL_UNSUPPORTED", "RATE_LIMITED", "UNAVAILABLE", "INTERNAL"
+        "BAD_REQUEST",
+        "UNAUTHENTICATED",
+        "ACCESS_DENIED",
+        "DEVICE_UNPAIRED",
+        "DEVICE_REVOKED",
+        "SIGNATURE_INVALID",
+        "TIMESTAMP_SKEW",
+        "NONCE_REPLAYED",
+        "SCOPE_DENIED",
+        "NOT_FOUND",
+        "METHOD_NOT_ALLOWED",
+        "IDEMPOTENCY_CONFLICT",
+        "APPROVAL_STALE",
+        "LEASE_HELD",
+        "LEASE_REQUIRED",
+        "TURN_NOT_ACTIVE",
+        "SESSION_NOT_PUBLISHED",
+        "CHALLENGE_INVALID",
+        "PAYLOAD_TOO_LARGE",
+        "UNSUPPORTED_MEDIA_TYPE",
+        "PROTOCOL_UNSUPPORTED",
+        "RATE_LIMITED",
+        "UNAVAILABLE",
+        "INTERNAL"
       ]
     },
-
     "Meta": {
       "type": "object",
-      "required": ["v", "hostId", "hostName", "protocol", "capabilities", "device", "serverTime"],
+      "required": [
+        "v",
+        "hostId",
+        "hostName",
+        "protocol",
+        "capabilities",
+        "device",
+        "serverTime"
+      ],
       "properties": {
-        "v": { "const": 1 },
-        "hostId": { "$ref": "#/$defs/hostId" },
-        "hostName": { "type": "string" },
+        "v": {
+          "const": 1
+        },
+        "hostId": {
+          "$ref": "#/$defs/hostId"
+        },
+        "hostName": {
+          "type": "string"
+        },
         "protocol": {
           "type": "object",
-          "required": ["major", "minor"],
-          "properties": { "major": { "const": 1 }, "minor": { "type": "integer", "minimum": 0 } }
-        },
-        "capabilities": { "type": "array", "items": { "type": "string" } },
-        "device": {
-          "type": "object",
-          "required": ["deviceId", "label", "scopes", "expiresAt"],
+          "required": [
+            "major",
+            "minor"
+          ],
           "properties": {
-            "deviceId": { "$ref": "#/$defs/deviceId" },
-            "label": { "type": "string" },
-            "scopes": { "type": "array", "items": { "$ref": "#/$defs/scope" } },
-            "expiresAt": { "$ref": "#/$defs/timestampMs" }
+            "major": {
+              "const": 1
+            },
+            "minor": {
+              "type": "integer",
+              "minimum": 0
+            }
           }
         },
-        "serverTime": { "$ref": "#/$defs/timestampMs" }
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "device": {
+          "type": "object",
+          "required": [
+            "deviceId",
+            "label",
+            "scopes",
+            "expiresAt"
+          ],
+          "properties": {
+            "deviceId": {
+              "$ref": "#/$defs/deviceId"
+            },
+            "label": {
+              "type": "string"
+            },
+            "scopes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/scope"
+              }
+            },
+            "expiresAt": {
+              "$ref": "#/$defs/timestampMs"
+            }
+          }
+        },
+        "serverTime": {
+          "$ref": "#/$defs/timestampMs"
+        }
       }
     },
     "Workspace": {
       "type": "object",
-      "required": ["workspaceId", "name"],
+      "required": [
+        "workspaceId",
+        "name"
+      ],
       "properties": {
-        "workspaceId": { "$ref": "#/$defs/workspaceId" },
-        "name": { "type": "string" }
+        "workspaceId": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "name": {
+          "type": "string"
+        }
       }
     },
     "SessionSummary": {
       "type": "object",
-      "required": ["sessionId", "workspaceId", "title", "status", "updatedAt", "controller"],
+      "required": [
+        "sessionId",
+        "workspaceId",
+        "title",
+        "status",
+        "updatedAt",
+        "controller"
+      ],
       "properties": {
-        "sessionId": { "$ref": "#/$defs/sessionId" },
-        "workspaceId": { "$ref": "#/$defs/workspaceId" },
-        "title": { "type": "string" },
-        "status": { "enum": ["idle", "running", "needs_approval", "unavailable"] },
-        "updatedAt": { "$ref": "#/$defs/timestampMs" },
+        "sessionId": {
+          "$ref": "#/$defs/sessionId"
+        },
+        "workspaceId": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "title": {
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "idle",
+            "running",
+            "needs_approval",
+            "unavailable"
+          ]
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/timestampMs"
+        },
         "controller": {
           "oneOf": [
-            { "type": "null" },
+            {
+              "type": "null"
+            },
             {
               "type": "object",
-              "required": ["deviceId", "label"],
-              "properties": { "deviceId": { "$ref": "#/$defs/deviceId" }, "label": { "type": "string" } }
+              "required": [
+                "deviceId",
+                "label"
+              ],
+              "properties": {
+                "deviceId": {
+                  "$ref": "#/$defs/deviceId"
+                },
+                "label": {
+                  "type": "string"
+                }
+              }
             }
           ]
         }
@@ -177,117 +432,303 @@
     "TimelineItem": {
       "description": "One durable session event as the client renders it. Snapshots and session.event frames share this shape.",
       "type": "object",
-      "required": ["eventId", "seq", "kind", "at", "payload"],
+      "required": [
+        "eventId",
+        "seq",
+        "kind",
+        "at",
+        "payload"
+      ],
       "properties": {
-        "eventId": { "type": "string" },
-        "seq": { "type": "integer", "minimum": 0 },
-        "kind": { "$ref": "#/$defs/sessionEventKind" },
-        "at": { "$ref": "#/$defs/timestampMs" },
-        "payload": { "type": "object" }
+        "eventId": {
+          "type": "string"
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "kind": {
+          "$ref": "#/$defs/sessionEventKind"
+        },
+        "at": {
+          "$ref": "#/$defs/timestampMs"
+        },
+        "payload": {
+          "type": "object"
+        }
       }
     },
     "sessionEventKind": {
       "description": "Clients must ignore kinds they do not know.",
       "type": "string",
       "examples": [
-        "user.message", "assistant.message", "assistant.delta", "tool.started", "tool.finished",
-        "approval.requested", "approval.resolved", "turn.started", "turn.finished", "prompt.queued", "session.status"
+        "user.message",
+        "assistant.message",
+        "assistant.delta",
+        "tool.started",
+        "tool.finished",
+        "approval.requested",
+        "approval.resolved",
+        "turn.started",
+        "turn.finished",
+        "prompt.queued",
+        "session.status"
       ]
     },
     "SessionSnapshot": {
       "type": "object",
-      "required": ["session", "cursor", "hasMore", "items", "pendingApprovals"],
+      "required": [
+        "session",
+        "cursor",
+        "hasMore",
+        "items",
+        "pendingApprovals"
+      ],
       "properties": {
-        "session": { "$ref": "#/$defs/SessionSummary" },
-        "cursor": { "$ref": "#/$defs/cursor" },
-        "hasMore": { "type": "boolean" },
-        "items": { "type": "array", "items": { "$ref": "#/$defs/TimelineItem" } },
+        "session": {
+          "$ref": "#/$defs/SessionSummary"
+        },
+        "cursor": {
+          "$ref": "#/$defs/cursor"
+        },
+        "hasMore": {
+          "type": "boolean"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TimelineItem"
+          }
+        },
         "activeTurn": {
           "type": "object",
-          "required": ["turn"],
-          "properties": { "turn": { "type": "integer" }, "turnId": { "$ref": "#/$defs/turnId" } }
+          "required": [
+            "turn"
+          ],
+          "properties": {
+            "turn": {
+              "type": "integer"
+            },
+            "turnId": {
+              "$ref": "#/$defs/turnId"
+            }
+          }
         },
-        "pendingApprovals": { "type": "array", "items": { "$ref": "#/$defs/Approval" } }
+        "pendingApprovals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Approval"
+          }
+        }
       }
     },
     "PromptReceipt": {
       "type": "object",
-      "required": ["clientRequestId", "turnId", "state"],
+      "required": [
+        "clientRequestId",
+        "turnId",
+        "state"
+      ],
       "properties": {
-        "clientRequestId": { "$ref": "#/$defs/clientRequestId" },
-        "turnId": { "$ref": "#/$defs/turnId" },
-        "state": { "enum": ["queued", "started", "finished"] }
+        "clientRequestId": {
+          "$ref": "#/$defs/clientRequestId"
+        },
+        "turnId": {
+          "$ref": "#/$defs/turnId"
+        },
+        "state": {
+          "description": "submitting: accepted by the host, not yet confirmed in the DSH log; failed: DSH never received it (resend explicitly with a new clientRequestId).",
+          "enum": [
+            "submitting",
+            "queued",
+            "started",
+            "finished",
+            "failed"
+          ]
+        }
       }
     },
     "Approval": {
       "type": "object",
-      "required": ["approvalId", "sessionId", "revision", "toolName", "preview", "requestedAt", "state"],
+      "required": [
+        "approvalId",
+        "sessionId",
+        "revision",
+        "toolName",
+        "preview",
+        "requestedAt",
+        "state"
+      ],
       "properties": {
-        "approvalId": { "$ref": "#/$defs/approvalId" },
-        "sessionId": { "$ref": "#/$defs/sessionId" },
-        "revision": { "type": "integer", "minimum": 1 },
-        "toolName": { "type": "string" },
-        "reason": { "type": "string" },
+        "approvalId": {
+          "$ref": "#/$defs/approvalId"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/sessionId"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "toolName": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
         "preview": {
           "type": "object",
-          "required": ["text", "truncated"],
-          "properties": { "text": { "type": "string" }, "truncated": { "type": "boolean" } }
+          "required": [
+            "text",
+            "truncated"
+          ],
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "truncated": {
+              "type": "boolean"
+            }
+          }
         },
-        "requestedAt": { "$ref": "#/$defs/timestampMs" },
-        "state": { "enum": ["pending", "allowed_once", "denied", "cancelled", "unavailable"] },
-        "resolvedBy": { "type": "string" }
+        "requestedAt": {
+          "$ref": "#/$defs/timestampMs"
+        },
+        "state": {
+          "enum": [
+            "pending",
+            "allowed_once",
+            "denied",
+            "cancelled",
+            "unavailable"
+          ]
+        },
+        "resolvedBy": {
+          "type": "string"
+        }
       }
     },
     "PairRedeemResponse": {
       "type": "object",
-      "required": ["pairingRequestId", "expiresAt", "hostKey"],
+      "required": [
+        "pairingRequestId",
+        "expiresAt",
+        "hostKey"
+      ],
       "properties": {
-        "pairingRequestId": { "$ref": "#/$defs/pairingRequestId" },
-        "expiresAt": { "$ref": "#/$defs/timestampMs" },
+        "pairingRequestId": {
+          "$ref": "#/$defs/pairingRequestId"
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/timestampMs"
+        },
         "hostKey": {
           "type": "object",
-          "required": ["publicKey", "fingerprint"],
-          "properties": { "publicKey": { "$ref": "#/$defs/spki" }, "fingerprint": { "$ref": "#/$defs/fingerprint" } }
+          "required": [
+            "publicKey",
+            "fingerprint"
+          ],
+          "properties": {
+            "publicKey": {
+              "$ref": "#/$defs/spki"
+            },
+            "fingerprint": {
+              "$ref": "#/$defs/fingerprint"
+            }
+          }
         }
       }
     },
     "PairStatusResponse": {
       "type": "object",
-      "required": ["state"],
+      "required": [
+        "state"
+      ],
       "properties": {
-        "state": { "enum": ["pending", "approved", "denied", "expired"] },
-        "grant": { "$ref": "#/$defs/DeviceGrant" }
+        "state": {
+          "enum": [
+            "pending",
+            "approved",
+            "denied",
+            "expired"
+          ]
+        },
+        "grant": {
+          "$ref": "#/$defs/DeviceGrant"
+        }
       }
     },
     "DeviceGrant": {
       "description": "Host-signed grant; signature covers grantSigningString() in packages/protocol.",
       "type": "object",
-      "required": ["hostId", "deviceId", "deviceKeyFingerprint", "scopes", "expiresAt", "signature"],
+      "required": [
+        "hostId",
+        "deviceId",
+        "deviceKeyFingerprint",
+        "scopes",
+        "expiresAt",
+        "signature"
+      ],
       "properties": {
-        "hostId": { "$ref": "#/$defs/hostId" },
-        "deviceId": { "$ref": "#/$defs/deviceId" },
-        "deviceKeyFingerprint": { "$ref": "#/$defs/fingerprint" },
-        "scopes": { "type": "array", "items": { "$ref": "#/$defs/scope" } },
-        "expiresAt": { "$ref": "#/$defs/timestampMs" },
-        "signature": { "type": "string", "pattern": "^[A-Za-z0-9_-]{80,120}$" }
+        "hostId": {
+          "$ref": "#/$defs/hostId"
+        },
+        "deviceId": {
+          "$ref": "#/$defs/deviceId"
+        },
+        "deviceKeyFingerprint": {
+          "$ref": "#/$defs/fingerprint"
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/scope"
+          }
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/timestampMs"
+        },
+        "signature": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{80,120}$"
+        }
       }
     },
     "Lease": {
       "type": "object",
-      "required": ["sessionId", "holder"],
+      "required": [
+        "sessionId",
+        "holder"
+      ],
       "properties": {
-        "sessionId": { "$ref": "#/$defs/sessionId" },
+        "sessionId": {
+          "$ref": "#/$defs/sessionId"
+        },
         "holder": {
           "oneOf": [
-            { "type": "null" },
+            {
+              "type": "null"
+            },
             {
               "type": "object",
-              "required": ["deviceId", "label"],
-              "properties": { "deviceId": { "$ref": "#/$defs/deviceId" }, "label": { "type": "string" } }
+              "required": [
+                "deviceId",
+                "label"
+              ],
+              "properties": {
+                "deviceId": {
+                  "$ref": "#/$defs/deviceId"
+                },
+                "label": {
+                  "type": "string"
+                }
+              }
             }
           ]
         },
-        "expiresAt": { "$ref": "#/$defs/timestampMs" }
+        "expiresAt": {
+          "$ref": "#/$defs/timestampMs"
+        }
       }
     },
     "ServerFrame": {
@@ -295,32 +736,84 @@
       "oneOf": [
         {
           "type": "object",
-          "required": ["v", "type", "sessionId", "eventId", "kind", "at", "payload"],
+          "required": [
+            "v",
+            "type",
+            "sessionId",
+            "eventId",
+            "kind",
+            "at",
+            "payload"
+          ],
           "properties": {
-            "v": { "const": 1 },
-            "type": { "const": "session.event" },
-            "sessionId": { "$ref": "#/$defs/sessionId" },
-            "eventId": { "type": "string" },
-            "seq": { "type": "integer", "minimum": 0 },
-            "cursor": { "$ref": "#/$defs/cursor" },
-            "ephemeral": { "const": true },
-            "kind": { "$ref": "#/$defs/sessionEventKind" },
-            "at": { "$ref": "#/$defs/timestampMs" },
-            "payload": { "type": "object" }
+            "v": {
+              "const": 1
+            },
+            "type": {
+              "const": "session.event"
+            },
+            "sessionId": {
+              "$ref": "#/$defs/sessionId"
+            },
+            "eventId": {
+              "type": "string"
+            },
+            "seq": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "cursor": {
+              "$ref": "#/$defs/cursor"
+            },
+            "ephemeral": {
+              "const": true
+            },
+            "kind": {
+              "$ref": "#/$defs/sessionEventKind"
+            },
+            "at": {
+              "$ref": "#/$defs/timestampMs"
+            },
+            "payload": {
+              "type": "object"
+            }
           }
         },
         {
           "type": "object",
-          "required": ["v", "type", "kind", "payload"],
+          "required": [
+            "v",
+            "type",
+            "kind",
+            "payload"
+          ],
           "properties": {
-            "v": { "const": 1 },
-            "type": { "const": "control" },
+            "v": {
+              "const": 1
+            },
+            "type": {
+              "const": "control"
+            },
             "kind": {
               "type": "string",
-              "examples": ["hello", "subscribed", "heartbeat", "resync.required", "lease.changed", "lease.lost", "approvals.changed", "host.status", "error"]
+              "examples": [
+                "hello",
+                "subscribed",
+                "heartbeat",
+                "resync.required",
+                "lease.changed",
+                "lease.lost",
+                "approvals.changed",
+                "host.status",
+                "error"
+              ]
             },
-            "sessionId": { "$ref": "#/$defs/sessionId" },
-            "payload": { "type": "object" }
+            "sessionId": {
+              "$ref": "#/$defs/sessionId"
+            },
+            "payload": {
+              "type": "object"
+            }
           }
         }
       ]
