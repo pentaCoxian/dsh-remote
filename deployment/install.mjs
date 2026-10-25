@@ -1,15 +1,13 @@
 #!/usr/bin/env node
-// Install (or remove) the supervised DSH host and cloudflared as *user* services:
-// systemd user units on Linux, launchd agents on macOS. Values are validated and
+// Install (or remove) the supervised DSH host as a *user* service: a systemd
+// user unit on Linux, a launchd agent on macOS. The plugin inside it reaches
+// phones over iroh, so nothing else needs to run. Values are validated and
 // escaped per format; --dry-run prints everything without touching the system.
 //
 //   node deployment/install.mjs [--dry-run] [--uninstall]
-//     [--dsh-entry PATH] [--node PATH] [--cloudflared PATH]
-//     [--dsh-home DIR] [--workdir DIR] [--web-port 3080]
-//
-// Prerequisite: `node deployment/render.mjs` (writes deployment/out/cloudflared/config.yml).
+//     [--dsh-entry PATH] [--node PATH] [--dsh-home DIR] [--workdir DIR] [--web-port 3080]
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -26,14 +24,12 @@ const platform = process.platform === 'linux' ? 'systemd' : process.platform ===
 if (platform === undefined) fail(`unsupported platform ${process.platform} (Linux systemd or macOS launchd only)`);
 
 const units = platform === 'systemd'
-  ? [
-      { template: 'systemd/dsh-remote-host.service.tmpl', target: join(home, '.config/systemd/user/dsh-remote-host.service'), name: 'dsh-remote-host.service' },
-      { template: 'systemd/dsh-remote-cloudflared.service.tmpl', target: join(home, '.config/systemd/user/dsh-remote-cloudflared.service'), name: 'dsh-remote-cloudflared.service' },
-    ]
-  : [
-      { template: 'launchd/dev.dshremote.host.plist.tmpl', target: join(home, 'Library/LaunchAgents/dev.dshremote.host.plist'), name: 'dev.dshremote.host' },
-      { template: 'launchd/dev.dshremote.cloudflared.plist.tmpl', target: join(home, 'Library/LaunchAgents/dev.dshremote.cloudflared.plist'), name: 'dev.dshremote.cloudflared' },
-    ];
+  ? [{ template: 'systemd/dsh-remote-host.service.tmpl', target: join(home, '.config/systemd/user/dsh-remote-host.service'), name: 'dsh-remote-host.service' }]
+  : [{ template: 'launchd/dev.dshremote.host.plist.tmpl', target: join(home, 'Library/LaunchAgents/dev.dshremote.host.plist'), name: 'dev.dshremote.host' }];
+/** The Sprint 1 cloudflared service: removed wherever it is still installed. */
+const retired = platform === 'systemd'
+  ? [{ target: join(home, '.config/systemd/user/dsh-remote-cloudflared.service'), name: 'dsh-remote-cloudflared.service' }]
+  : [{ target: join(home, 'Library/LaunchAgents/dev.dshremote.cloudflared.plist'), name: 'dev.dshremote.cloudflared' }];
 
 function fail(message) {
   console.error(`install: ${message}`);
@@ -60,15 +56,17 @@ function which(binary) {
   }
 }
 
+function remove(unit) {
+  if (platform === 'systemd') run('systemctl', ['--user', 'disable', '--now', unit.name], { ignoreFailure: true });
+  else run('launchctl', ['bootout', `gui/${process.getuid()}/${unit.name}`], { ignoreFailure: true });
+  console.log(`remove ${unit.target}`);
+  if (!dryRun) rmSync(unit.target, { force: true });
+}
+
 if (uninstall) {
-  for (const unit of units) {
-    if (platform === 'systemd') run('systemctl', ['--user', 'disable', '--now', unit.name], { ignoreFailure: true });
-    else run('launchctl', ['bootout', `gui/${process.getuid()}/${unit.name}`], { ignoreFailure: true });
-    console.log(`remove ${unit.target}`);
-    if (!dryRun) rmSync(unit.target, { force: true });
-  }
+  for (const unit of [...units, ...retired.filter((unit) => existsSync(unit.target))]) remove(unit);
   if (platform === 'systemd') run('systemctl', ['--user', 'daemon-reload'], { ignoreFailure: true });
-  console.log('Removed the DSH Remote services. Your DSH home, plugin state and cloudflared config were left in place.');
+  console.log('Removed the DSH Remote service. Your DSH home and plugin state were left in place.');
   process.exit(0);
 }
 
@@ -89,14 +87,6 @@ if (dshEntry === undefined) {
 }
 if (dshEntry === undefined || !existsSync(dshEntry)) fail('cannot find the dsh entry script; pass --dsh-entry /path/to/@deepseek-ai/dsh/lib/bin.js');
 
-const cloudflared = value('--cloudflared') ?? which('cloudflared');
-if (cloudflared === undefined) fail('cloudflared is not on PATH; install it or pass --cloudflared');
-
-const renderedTunnel = join(here, 'out/cloudflared/config.yml');
-if (!existsSync(renderedTunnel)) fail('run `node deployment/render.mjs` first (deployment/out/cloudflared/config.yml is missing)');
-const configDir = join(home, '.config/dsh-remote');
-const tunnelConfig = join(configDir, 'cloudflared.yml');
-
 const values = {
   NODE: node,
   NODE_BIN_DIR: dirname(node),
@@ -104,8 +94,6 @@ const values = {
   DSH_HOME: value('--dsh-home') ?? (process.env.DSH_HOME?.trim() || join(home, '.dsh')),
   WORKDIR: value('--workdir') ?? home,
   DSH_WEB_PORT: value('--web-port') ?? '3080',
-  CLOUDFLARED: cloudflared,
-  CLOUDFLARED_CONFIG: tunnelConfig,
   LOG_DIR: join(home, 'Library/Logs/dsh-remote'),
 };
 
@@ -124,6 +112,11 @@ const escapeFor = {
   launchd: (text) => text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll("'", '&apos;'),
 };
 
+for (const unit of retired.filter((unit) => existsSync(unit.target))) {
+  console.log('\nThe Sprint 1 cloudflared service is no longer used:');
+  remove(unit);
+}
+
 for (const unit of units) {
   const template = readFileSync(join(here, unit.template), 'utf8');
   const rendered = template.replace(/@([A-Z_]+)@/g, (whole, name) => {
@@ -137,13 +130,7 @@ for (const unit of units) {
   }
 }
 
-console.log(`\ninstall ${renderedTunnel} -> ${tunnelConfig} (0600)`);
-if (!dryRun) {
-  mkdirSync(configDir, { recursive: true, mode: 0o700 });
-  copyFileSync(renderedTunnel, tunnelConfig);
-  chmodSync(tunnelConfig, 0o600);
-  if (platform === 'launchd') mkdirSync(values.LOG_DIR, { recursive: true, mode: 0o700 });
-}
+if (!dryRun && platform === 'launchd') mkdirSync(values.LOG_DIR, { recursive: true, mode: 0o700 });
 
 if (platform === 'systemd') {
   run('systemctl', ['--user', 'daemon-reload']);
