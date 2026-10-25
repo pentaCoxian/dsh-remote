@@ -1,9 +1,8 @@
 /**
  * DSH Remote — DeepSeek Harness plugin entry. Continue an existing DSH session
- * from the DSH Remote phone app over Cloudflare Tunnel + Access. Load it into
- * the `web` profile; see docs/setup-cloudflare.md for the one-time setup.
+ * from the DSH Remote phone app over an end-to-end encrypted iroh connection.
+ * Load it into the `web` profile; see docs/setup.md.
  */
-import { cloudflareAccessVerifier } from './core/access.ts';
 import { parseConfig } from './dsh/config.ts';
 import { registerCommands, startRemote } from './dsh/plugin.ts';
 import type { RcRuntime } from './dsh/commands.ts';
@@ -20,7 +19,5 @@ export function apply(ctx: DshContext, rawConfig: unknown): void {
     ctx.logger?.warn(`dsh-remote: not configured (${parsed.problems.length} problem(s)); run /rc for details`);
     return;
   }
-  // Production identity comes only from the Zero Trust team's own issuer and JWKS.
-  const access = cloudflareAccessVerifier(parsed.config.access.teamName, parsed.config.access.audTags);
-  startRemote(ctx, parsed.config, access, runtime);
+  startRemote(ctx, parsed.config, runtime);
 }

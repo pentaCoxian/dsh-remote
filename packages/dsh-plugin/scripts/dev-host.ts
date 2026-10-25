@@ -1,37 +1,31 @@
-// DEV ONLY. A complete DSH Remote host with no DSH and no Cloudflare, for
-// building the phone app: RemoteHost on FakeAdapter, behind a small proxy that
-// plays Cloudflare Access by turning `Authorization: Bearer dev-<name>` into a
-// locally signed Cf-Access-Jwt-Assertion. Never deploy this.
+// DEV ONLY. A complete DSH Remote host with no DSH, for building the phone app:
+// RemoteHost on FakeAdapter behind a real iroh endpoint, so the app pairs with
+// it exactly as with a real host. Key and paired devices persist in --state
+// (default .dsh-home/dev-host) so a paired phone survives restarts.
 //
-//   node scripts/dev-host.ts [--lan] [--port 4319]
-//   then: stdin commands `pair`, `ask`, `stream`, `local <session>`, `quit`
+//   node --conditions=source scripts/dev-host.ts [--relays n0|none] [--state <dir>]
+//   then: stdin commands `pair`, `y`/`n`, `ask`, `stream`, `local <session>`, `quit`
 //
-// The app's dev build maps the QR origin https://dsh.dev.invalid to this proxy.
-import { createServer, request as httpRequest } from 'node:http';
-import { connect } from 'node:net';
-import { networkInterfaces } from 'node:os';
+// `--relays none` serves direct addresses only (phone on the same LAN).
+import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
-import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose';
 import QRCode from 'qrcode';
-import { HEADERS } from '@dsh-remote/protocol';
-import { createAccessVerifier } from '../src/core/access.ts';
 import { MemoryAudit } from '../src/core/audit.ts';
 import { systemClock } from '../src/core/clock.ts';
-import { HostIdentity } from '../src/core/host-identity.ts';
-import { MemoryStore } from '../src/core/store.ts';
+import { HostKey } from '../src/core/host-key.ts';
+import { shortPeerId } from '../src/core/peer.ts';
+import type { ReceiptsDocument } from '../src/core/receipts.ts';
+import type { HostStateDocument } from '../src/core/state.ts';
+import { ensurePrivateDir, JsonFileStore } from '../src/core/store.ts';
+import { DEFAULT_RELAYS } from '../src/dsh/config.ts';
 import { RemoteHost } from '../src/host.ts';
 import { FakeAdapter } from '../src/testing/fake-adapter.ts';
 
 const args = process.argv.slice(2);
-const lan = args.includes('--lan');
-const proxyPort = Number(args[args.indexOf('--port') + 1] ?? 4319) || 4319;
-const PUBLIC_HOST = 'dsh.dev.invalid';
-const ISSUER = 'https://dev.cloudflareaccess.invalid';
-const AUD = 'd'.repeat(64);
-
-const { publicKey, privateKey } = await generateKeyPair('RS256');
-const jwk = { ...(await exportJWK(publicKey)), kid: 'dev', alg: 'RS256' };
-const access = createAccessVerifier({ issuer: ISSUER, audiences: [AUD], keys: createLocalJWKSet({ keys: [jwk] }) });
+const option = (name: string) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
+const relays = option('--relays') === 'none' ? [] : DEFAULT_RELAYS;
+const dir = resolve(option('--state') ?? join(import.meta.dirname, '../../../.dsh-home/dev-host'));
+ensurePrivateDir(dir);
 
 const adapter = new FakeAdapter();
 adapter.autoReply = false;
@@ -39,22 +33,21 @@ adapter.addSession('session-dev-1', { cwd: '/home/dev/api', title: 'Refactor the
 adapter.addSession('session-dev-2', { cwd: '/home/dev/web', title: 'Fix the flaky test' });
 const host = await RemoteHost.create({
   adapter,
-  access,
   clock: systemClock,
-  identity: HostIdentity.generate(),
-  stateStore: new MemoryStore(),
-  receiptsStore: new MemoryStore(),
+  hostKey: await HostKey.loadOrCreate(join(dir, 'endpoint-key')),
+  stateStore: new JsonFileStore<HostStateDocument>(join(dir, 'state.json')),
+  receiptsStore: new JsonFileStore<ReceiptsDocument>(join(dir, 'receipts.json')),
   audit: new MemoryAudit(),
-  publicHost: PUBLIC_HOST,
-  linkOrigin: 'https://link.dev.invalid',
-  port: 0,
+  iroh: { relays },
   hostName: 'Dev Host',
   grantTtlMs: 7 * 86_400_000,
   remoteApprovalTimeoutMs: 600_000,
+  entry: 'dev',
 });
 await host.publish('session-dev-1');
 await host.publish('session-dev-2');
-const apiPort = await host.start();
+await host.start();
+const online = await host.endpoint!.online(10_000);
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -77,61 +70,12 @@ adapter.onPrompt = (deviceId, submission) => {
   void reply(submission.sessionId, submission.text, submission.requestId, { kind: 'dsh-remote-device', deviceId });
 };
 
-async function assertionFor(name: string): Promise<string> {
-  return new SignJWT({ email: `${name}@dev.invalid`, type: 'app' })
-    .setProtectedHeader({ alg: 'RS256', kid: 'dev' })
-    .setIssuer(ISSUER)
-    .setAudience([AUD])
-    .setSubject(`dev-${name}`)
-    .setIssuedAt()
-    .setExpirationTime('15m')
-    .sign(privateKey);
-}
-
-/** Resolve the dev identity from `Authorization: Bearer dev-<name>`; anything else gets no assertion. */
-async function accessHeaders(authorization: string | undefined): Promise<Record<string, string>> {
-  const match = /^Bearer dev-([a-z0-9]{1,32})$/.exec(authorization ?? '');
-  return match === null ? {} : { [HEADERS.accessAssertion]: await assertionFor(match[1]!) };
-}
-
-function rewrite(headers: NodeJS.Dict<string | string[]>, extra: Record<string, string>): Record<string, string | string[]> {
-  const out: Record<string, string | string[]> = {};
-  for (const [key, value] of Object.entries(headers)) if (value !== undefined && key !== 'authorization' && key !== HEADERS.accessAssertion) out[key] = value;
-  return { ...out, host: PUBLIC_HOST, ...extra };
-}
-
-const proxy = createServer(async (req, res) => {
-  if (req.headers.authorization === undefined) {
-    // Shape of a Managed OAuth refusal for clients exploring discovery.
-    res.writeHead(401, { 'www-authenticate': 'Bearer realm="dev"', 'content-type': 'application/json' }).end('{"error":"unauthorized"}');
-    return;
-  }
-  const upstream = httpRequest({ host: '127.0.0.1', port: apiPort, method: req.method, path: req.url, headers: rewrite(req.headers, await accessHeaders(req.headers.authorization)) }, (answer) => {
-    res.writeHead(answer.statusCode ?? 502, answer.headers);
-    answer.pipe(res);
-  });
-  upstream.on('error', () => res.writeHead(502).end());
-  req.pipe(upstream);
-});
-proxy.on('upgrade', async (req, socket, head) => {
-  const headers = rewrite(req.headers, await accessHeaders(req.headers.authorization));
-  const upstream = connect(apiPort, '127.0.0.1', () => {
-    const lines = Object.entries(headers).flatMap(([key, value]) => (Array.isArray(value) ? value : [value]).map((v) => `${key}: ${v}`));
-    upstream.write(`${req.method} ${req.url} HTTP/1.1\r\n${lines.join('\r\n')}\r\n\r\n`);
-    upstream.write(head);
-    socket.pipe(upstream).pipe(socket);
-  });
-  upstream.on('error', () => socket.destroy());
-  socket.on('error', () => upstream.destroy());
-});
-const bind = lan ? '0.0.0.0' : '127.0.0.1';
-await new Promise<void>((resolve) => proxy.listen(proxyPort, bind, resolve));
-
-const addresses = lan ? Object.values(networkInterfaces()).flat().filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => i!.address) : ['127.0.0.1'];
-console.log(`\nDSH Remote dev host (FAKE DSH, FAKE ACCESS — never expose this)`);
-console.log(`  proxy:    ${addresses.map((a) => `http://${a}:${proxyPort}`).join(', ')}  (Android emulator: http://10.0.2.2:${proxyPort})`);
-console.log(`  identity: send "Authorization: Bearer dev-owner"`);
-console.log(`  map https://${PUBLIC_HOST} → the proxy in the app's dev build\n`);
+const status = host.status().transport!;
+console.log(`\nDSH Remote dev host (FAKE DSH — never expose this)`);
+console.log(`  host id:  ${host.hostId}`);
+console.log(`  relay:    ${status.homeRelay ?? (relays.length === 0 ? 'none (direct addresses only)' : online ? 'none yet' : 'not connected')}`);
+console.log(`  direct:   ${status.directAddresses.join(', ')}`);
+console.log(`  state:    ${dir}\n`);
 
 async function showPairing(): Promise<void> {
   const offer = host.offerPairing('session-dev-1');
@@ -141,7 +85,7 @@ async function showPairing(): Promise<void> {
 
 host.onPairingChange((request) => {
   if (request.state !== 'pending') return;
-  console.log(`\nPairing request from ${request.accessEmail}: ${request.deviceLabel} (${request.platform}), key ${request.fingerprint.slice(0, 16)}`);
+  console.log(`\nPairing request from peer ${shortPeerId(request.peerId)}: ${request.deviceLabel} (${request.platform}), key ${request.fingerprint.slice(0, 16)}`);
   console.log('Type `y` to approve or `n` to deny.');
   pendingDecision = request.pairingRequestId;
 });
@@ -175,5 +119,4 @@ for await (const line of input) {
 }
 input.close();
 await host.stop();
-proxy.close();
 process.exit(0);

@@ -1,4 +1,3 @@
-import type { HostIdentity } from '../core/host-identity.ts';
 import type { Pairing, RedeemBody } from '../core/pairing.ts';
 import type { ProofVerifier } from '../core/proof.ts';
 import { ApiError, type Route } from '../http/server.ts';
@@ -6,7 +5,6 @@ import { ApiError, type Route } from '../http/server.ts';
 export interface PairingDeps {
   readonly pairing: Pairing;
   readonly proof: ProofVerifier;
-  readonly host: HostIdentity;
 }
 
 const PAIRING_REQUEST_ID = /^pair_[A-Za-z0-9_-]{22,64}$/;
@@ -27,11 +25,7 @@ export function pairingRoutes(deps: PairingDeps): Route[] {
         if (!result.ok) throw new ApiError(result.code, undefined, result.serverTime === undefined ? {} : { serverTime: result.serverTime });
         return {
           status: 201,
-          body: {
-            pairingRequestId: result.request.pairingRequestId,
-            expiresAt: result.request.expiresAt,
-            hostKey: { publicKey: deps.host.publicKey, fingerprint: deps.host.fingerprint },
-          },
+          body: { pairingRequestId: result.request.pairingRequestId, expiresAt: result.request.expiresAt },
         };
       },
     },

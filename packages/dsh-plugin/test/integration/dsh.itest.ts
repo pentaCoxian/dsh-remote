@@ -1,33 +1,30 @@
 // End-to-end against the pinned DSH host: `pnpm test:dsh`.
 // Boots `dsh web` (DSH 0.2.1-rc.3) in a throwaway DSH_HOME with the plugin's
-// test-harness entry and a scripted model, then drives the phone side through
-// the real native API, the real DSH session controller, gateway and approvals.
+// test-harness entry and a scripted model, then drives the phone side over a
+// real iroh connection (relays off) dialed from the pairing QR's ticket, through
+// the real native API, DSH session controller, gateway and approvals.
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:http';
 import { createServer as createNetServer } from 'node:net';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CLOSE_CODES, HEADERS, parsePairingUrl } from '@dsh-remote/protocol';
-import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { CLOSE_CODES, parsePairingUrl } from '@dsh-remote/protocol';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { AdminClient } from '../../src/admin/socket.ts';
-import type { PairingOffer, PendingPairing } from '../../src/host.ts';
+import type { HostStatus, PairingOffer, PendingPairing } from '../../src/host.ts';
+import { dialTicket, type IrohDialer } from '../helpers/iroh.ts';
 import { send, toBody, TestPhone, type SendOptions } from '../helpers/phone.ts';
 
 const pluginDir = fileURLToPath(new URL('../..', import.meta.url));
 const dshBin = join(dirname(createRequire(import.meta.url).resolve('@deepseek-ai/dsh/package.json')), 'lib', 'bin.js');
-const AUD = 'c'.repeat(64);
 
 let home: string;
-let apiPort: number;
 let dsh: ChildProcess;
 let fakeModel: ChildProcess;
-let jwksServer: ReturnType<typeof createServer>;
-let sign: (sub?: string) => Promise<string>;
+let dialer: IrohDialer;
 let admin: AdminClient;
 let sessionId: string;
 let phone: TestPhone;
@@ -51,36 +48,19 @@ async function until<T>(probe: () => T | undefined, what: string, timeoutMs = 90
   }
 }
 
-const signed = async (options: SendOptions) =>
-  send(apiPort, { ...options, headers: { [HEADERS.accessAssertion]: await sign(), ...phone.proofHeaders(options.method, options.target, toBody(options.body)), ...options.headers } });
+const signed = async (options: SendOptions) => send(dialer.port, { ...options, headers: { ...phone.proofHeaders(options.method, options.target, toBody(options.body)), ...options.headers } });
 
 beforeAll(async () => {
   home = mkdtempSync(join(tmpdir(), 'dsh-remote-itest-'));
   chmodSync(home, 0o700);
 
-  const { publicKey, privateKey } = await generateKeyPair('RS256');
-  const jwk = { ...(await exportJWK(publicKey)), kid: 'itest', alg: 'RS256', use: 'sig' };
-  jwksServer = createServer((_req, res) => res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ keys: [jwk] })));
-  await new Promise<void>((resolve) => jwksServer.listen(0, '127.0.0.1', resolve));
-  const issuer = `http://127.0.0.1:${(jwksServer.address() as { port: number }).port}`;
-  sign = (sub = 'itest-user') =>
-    new SignJWT({ email: 'owner@example.com', type: 'app' })
-      .setProtectedHeader({ alg: 'RS256', kid: 'itest' })
-      .setIssuer(issuer)
-      .setAudience([AUD])
-      .setSubject(sub)
-      .setIssuedAt()
-      .setExpirationTime('10m')
-      .sign(privateKey);
-
   const modelPort = await freePort();
   fakeModel = spawn(process.execPath, [join(pluginDir, 'test/integration/fake-llm.mjs'), String(modelPort)], { stdio: 'ignore' });
 
-  const env = { ...process.env, DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1', FAKE_LLM_KEY: 'itest', DSH_REMOTE_TEST_ISSUER: issuer, DSH_REMOTE_TEST_JWKS: `${issuer}/certs`, DSH_REMOTE_TEST_AUD: AUD };
+  const env = { ...process.env, DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1', FAKE_LLM_KEY: 'itest' };
   const add = spawnSync(process.execPath, [dshBin, 'plugin', '--profile', 'web', 'add', pluginDir], { env, encoding: 'utf8' });
   if (add.status !== 0) throw new Error(`dsh plugin add failed:\n${add.stdout}\n${add.stderr}`);
 
-  apiPort = await freePort();
   const overlay = join(home, 'itest.patch.yml');
   writeFileSync(
     overlay,
@@ -90,14 +70,9 @@ beforeAll(async () => {
     - id: dsh-remote-test-harness
       name: "@dsh-remote/dsh-plugin/testing"
       config:
-        publicHost: dsh.example.com
-        linkOrigin: https://link.example.com
         hostName: Harness
-        port: ${apiPort}
+        relays: []
         remoteApprovalTimeoutSec: 60
-        access:
-          teamName: harness
-          audTags: [${AUD}]
 - id: llm-pi-ai
   config:
     providers:
@@ -128,27 +103,37 @@ beforeAll(async () => {
 
 afterAll(async () => {
   admin?.close();
+  await dialer?.close();
   dsh?.kill('SIGTERM');
   fakeModel?.kill();
-  jwksServer?.close();
   await new Promise((resolve) => setTimeout(resolve, 500));
   rmSync(home, { recursive: true, force: true });
 });
 
 describe('DSH Remote inside dsh web 0.2.1-rc.3', () => {
-  it('pairs a phone: QR challenge, redeem, local approval, host-signed grant', async () => {
+  it('runs the production transport: an iroh endpoint and no TCP listener', async () => {
+    const status = await admin.call<HostStatus>({ method: 'status' });
+    expect(status.entry).toBe('test-harness');
+    expect(status.loopbackPort).toBeNull();
+    expect(status.transport).toMatchObject({ relays: [], homeRelay: null });
+  });
+
+  it('pairs a phone: QR ticket, iroh dial, redeem, local approval, grant', async () => {
     phone = new TestPhone();
     const offer = await admin.call<PairingOffer>({ method: 'offerPairing', sessionId });
     const payload = parsePairingUrl(offer.url)!;
     expect(payload.sessionId).toBe(sessionId);
+    expect(payload.hostName).toBe('Harness');
+    dialer = await dialTicket(payload.ticket);
+    expect(dialer.connection.remoteId().toString()).toBe(offer.hostId);
     const redeem = await signed({ method: 'POST', target: '/v1/pair/redeem', body: { challengeId: payload.challengeId, publicKey: phone.publicKey, deviceLabel: 'Integration Phone', platform: 'android', hardwareBacked: false } });
     expect(redeem.status).toBe(201);
-    expect(redeem.json.hostKey.fingerprint).toBe(payload.hostKeyFingerprint);
     const pending = await admin.call<PendingPairing[]>({ method: 'pendingPairings' });
     expect(pending.map((p) => p.challengeId)).toContain(payload.challengeId);
     await admin.call({ method: 'decidePairing', pairingRequestId: redeem.json.pairingRequestId, decision: 'approve' });
     const status = await signed({ method: 'GET', target: `/v1/pair/requests/${redeem.json.pairingRequestId}` });
     expect(status.json.state).toBe('approved');
+    expect(status.json.grant.hostId).toBe(offer.hostId);
     phone.deviceId = status.json.grant.deviceId;
   });
 
@@ -162,7 +147,7 @@ describe('DSH Remote inside dsh web 0.2.1-rc.3', () => {
 
   it('runs a phone prompt through DSH, answers its tool approval from the phone, and streams the turn', async () => {
     const before = await signed({ method: 'GET', target: `/v1/sessions/${sessionId}` });
-    const ws = new WebSocket(`ws://127.0.0.1:${apiPort}/v1/events`, { headers: { host: 'dsh.example.com', [HEADERS.accessAssertion]: await sign(), ...phone.proofHeaders('GET', '/v1/events', Buffer.alloc(0)) } });
+    const ws = new WebSocket(`ws://127.0.0.1:${dialer.port}/v1/events`, { headers: phone.proofHeaders('GET', '/v1/events', Buffer.alloc(0)) });
     const frames: any[] = [];
     ws.on('message', (data) => frames.push(JSON.parse(data.toString('utf8'))));
     await new Promise((resolve, reject) => (ws.once('open', resolve), ws.once('error', reject)));
@@ -200,5 +185,6 @@ describe('DSH Remote inside dsh web 0.2.1-rc.3', () => {
     await admin.call({ method: 'revokeDevice', deviceId: phone.deviceId });
     expect(await closed).toBe(CLOSE_CODES.deviceRevoked);
     expect((await signed({ method: 'GET', target: '/v1/sessions' })).json.error.code).toBe('DEVICE_REVOKED');
+    expect(await dialer.connection.closed()).toContain('revoked');
   });
 });

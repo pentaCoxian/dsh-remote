@@ -1,6 +1,5 @@
 import type { Scope } from '@dsh-remote/protocol';
 import type { Clock } from './clock.ts';
-import { randomId } from './ids.ts';
 import type { DocumentStore } from './store.ts';
 
 export interface DeviceRecord {
@@ -11,9 +10,8 @@ export interface DeviceRecord {
   /** base64url SPKI DER of the phone's P-256 key. */
   readonly publicKey: string;
   readonly fingerprint: string;
-  /** Access identity the grant is bound to. */
-  readonly accessSub: string;
-  readonly accessEmail: string;
+  /** iroh EndpointId of the phone install; the grant works only over a connection from it. */
+  readonly peerId: string;
   readonly scopes: readonly Scope[];
   readonly createdAt: number;
   readonly expiresAt: number;
@@ -27,16 +25,21 @@ export interface Publication {
 }
 
 export interface HostStateDocument {
-  readonly version: 1;
-  readonly hostId: string;
+  readonly version: 2;
   devices: DeviceRecord[];
   published: Publication[];
+}
+
+/** Sprint 1 state: devices were bound to Cloudflare Access identities. */
+interface HostStateDocumentV1 {
+  readonly version: 1;
+  readonly published: Publication[];
 }
 
 type Listener<T> = (value: T) => void;
 
 /**
- * Owner of `state.json`: the host id, device grants and published sessions.
+ * Owner of `state.json`: device grants and published sessions.
  * Reads are synchronous from memory; every change is persisted before the
  * returned promise settles.
  */
@@ -59,19 +62,18 @@ export class HostState {
     this.doc = doc;
   }
 
+  /**
+   * Open or create the document. A Sprint 1 (version 1) file keeps its
+   * published sessions; its devices are dropped because they were bound to
+   * Cloudflare Access identities, which nothing presents any more.
+   */
   static async open(store: DocumentStore<HostStateDocument>, clock: Clock): Promise<HostState> {
-    const existing = await store.read();
-    if (existing !== undefined) {
-      if (existing.version !== 1) throw new Error('dsh-remote: unsupported state.json version');
-      return new HostState(store, clock, existing);
-    }
-    const doc: HostStateDocument = { version: 1, hostId: randomId('host'), devices: [], published: [] };
+    const existing = (await store.read()) as HostStateDocument | HostStateDocumentV1 | undefined;
+    if (existing?.version === 2) return new HostState(store, clock, existing);
+    if (existing !== undefined && existing.version !== 1) throw new Error('dsh-remote: unsupported state.json version');
+    const doc: HostStateDocument = { version: 2, devices: [], published: existing?.published ?? [] };
     await store.write(doc);
     return new HostState(store, clock, doc);
-  }
-
-  get hostId(): string {
-    return this.doc.hostId;
   }
 
   device(deviceId: string): DeviceRecord | undefined {

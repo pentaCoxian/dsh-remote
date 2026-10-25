@@ -1,10 +1,10 @@
-import { chmodSync, mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FileAudit } from '../src/core/audit.ts';
 import { systemClock } from '../src/core/clock.ts';
-import { HostIdentity } from '../src/core/host-identity.ts';
+import { HostKey } from '../src/core/host-key.ts';
 import { HostState, type HostStateDocument } from '../src/core/state.ts';
 import { ensurePrivateDir, JsonFileStore } from '../src/core/store.ts';
 
@@ -35,16 +35,25 @@ describe('private files', () => {
     expect(mode(path)).toBe(0o600);
     expect(readdirSync(dir)).toEqual(['state.json']);
     const reopened = await HostState.open(new JsonFileStore<HostStateDocument>(path), systemClock);
-    expect(reopened.hostId).toBe(state.hostId);
     expect(reopened.publications().map((p) => p.sessionId).sort()).toEqual(['s1', 's2']);
   });
 
-  it('creates the host key once, 0600, and reloads the same identity', async () => {
-    const path = join(dir, 'host-key.pem');
-    const first = await HostIdentity.loadOrCreate(path);
+  it('keeps publications but drops Access-bound devices from a Sprint 1 state file', async () => {
+    const path = join(dir, 'state.json');
+    writeFileSync(path, JSON.stringify({ version: 1, hostId: 'host_xxxxxxxxxxxxxxxx', devices: [{ deviceId: 'dev_old', accessSub: 'u' }], published: [{ sessionId: 's1', publishedAt: 1 }] }), { mode: 0o600 });
+    const state = await HostState.open(new JsonFileStore<HostStateDocument>(path), systemClock);
+    expect(state.devices()).toEqual([]);
+    expect(state.isPublished('s1')).toBe(true);
+    expect(JSON.parse(readFileSync(path, 'utf8')).version).toBe(2);
+  });
+
+  it('creates the iroh key once, 0600, and reloads the same EndpointId', async () => {
+    const path = join(dir, 'endpoint-key');
+    const first = await HostKey.loadOrCreate(path);
     expect(mode(path)).toBe(0o600);
-    const second = await HostIdentity.loadOrCreate(path);
-    expect(second.fingerprint).toBe(first.fingerprint);
+    expect(first.endpointId).toMatch(/^[0-9a-f]{64}$/);
+    const second = await HostKey.loadOrCreate(path);
+    expect(second.endpointId).toBe(first.endpointId);
   });
 
   it('appends the audit log as 0600', async () => {

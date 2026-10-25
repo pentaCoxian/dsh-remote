@@ -1,3 +1,4 @@
+import { shortPeerId } from '../core/peer.ts';
 import type { RemoteHost } from '../host.ts';
 import type { DshCommandInvocation, DshCommandResult } from './types.ts';
 
@@ -40,15 +41,16 @@ export function rcCommand(runtime: RcRuntime): (invocation: DshCommandInvocation
       case 'status': {
         const status = host.status();
         const devices = host.devices().filter((d) => !d.revoked);
+        const relay = status.transport === null ? 'not running' : (status.transport.homeRelay ?? (status.transport.relays.length === 0 ? 'direct only' : 'no relay yet'));
         return {
           kind: 'success',
           text: [
-            `Host: ${status.hostName} (${status.origin})`,
+            `Host: ${status.hostName} (id ${shortPeerId(status.hostId)})`,
+            `Relay: ${relay}`,
             `This session: ${host.isPublished(sessionId) ? 'remote control on' : 'remote control off'}`,
             `Published sessions: ${status.published.length}`,
             `Paired phones: ${devices.length}${devices.length === 0 ? '' : ` (${devices.map((d) => d.label).join(', ')})`}`,
             `Waiting for approval: ${status.pendingPairings}`,
-            `Host key: ${status.hostKeyFingerprint}`,
           ].join('\n'),
         };
       }

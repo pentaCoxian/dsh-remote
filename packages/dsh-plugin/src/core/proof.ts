@@ -12,9 +12,9 @@ import {
   type ErrorCode,
   type Scope,
 } from '@dsh-remote/protocol';
-import type { AccessIdentity } from './access.ts';
 import type { Clock } from './clock.ts';
 import { NonceCache } from './limits.ts';
+import type { PeerIdentity } from './peer.ts';
 import type { DeviceRecord, HostState } from './state.ts';
 
 /** The `X-DSH-*` header values of one request, each present at most once. */
@@ -32,7 +32,7 @@ export interface SignedRequest {
   readonly target: string;
   readonly body: Uint8Array;
   readonly headers: ProofHeaders;
-  readonly identity: AccessIdentity;
+  readonly identity: PeerIdentity;
 }
 
 export type ProofFailure = { readonly ok: false; readonly code: ErrorCode; readonly serverTime?: number };
@@ -43,8 +43,10 @@ const DEVICE_ID = /^dev_[A-Za-z0-9_-]{16,64}$/;
 const SIGNATURE = /^[A-Za-z0-9_-]{8,100}$/;
 
 /**
- * Verifies the per-device request proof of spec §5 on top of an already
- * verified Access identity. Order: cheap shape checks, timestamp, grant, then
+ * Verifies the per-device request proof of spec §5 on top of the peer
+ * identity QUIC already authenticated. The two keys back each other: the iroh
+ * key lives in app storage, the request key in the phone's secure hardware.
+ * Order: cheap shape checks, timestamp, grant, then
  * the signature; the nonce is remembered only after the signature verifies.
  */
 export class ProofVerifier {
@@ -69,7 +71,7 @@ export class ProofVerifier {
     this.bootMs = bootMs;
   }
 
-  /** Proof for a paired device: grant lookup, Access binding, signature, nonce, scope. */
+  /** Proof for a paired device: grant lookup, peer binding, signature, nonce, scope. */
   verifyDevice(request: SignedRequest, scope: Scope): DeviceProof {
     const shape = this.checkShape(request);
     if (!shape.ok) return shape;
@@ -79,7 +81,7 @@ export class ProofVerifier {
     if (device === undefined) return { ok: false, code: 'DEVICE_UNPAIRED' };
     if (device.revokedAt !== null) return { ok: false, code: 'DEVICE_REVOKED' };
     if (device.expiresAt <= this.clock.now()) return { ok: false, code: 'DEVICE_UNPAIRED' };
-    if (device.accessSub !== request.identity.sub) return { ok: false, code: 'ACCESS_DENIED' };
+    if (device.peerId !== request.identity.peerId) return { ok: false, code: 'ACCESS_DENIED' };
     const key = importP256PublicKey(device.publicKey);
     if (key === undefined) return { ok: false, code: 'DEVICE_UNPAIRED' };
     const signed = this.checkSignature(request, key.key, `${deviceId}:${request.headers.nonce}`);

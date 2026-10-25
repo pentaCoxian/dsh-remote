@@ -2,7 +2,7 @@ import { connect } from 'node:net';
 import { HEADERS, isValid } from '@dsh-remote/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { startTestHost, type TestHost } from './helpers/host.ts';
-import { TestPhone } from './helpers/phone.ts';
+import { TEST_PEER_HEADER, TestPhone } from './helpers/phone.ts';
 
 let host: TestHost;
 let phone: TestPhone;
@@ -31,17 +31,23 @@ describe('listener', () => {
     expect(address.address).toBe('127.0.0.1');
   });
 
-  it('answers only the configured public hostname', async () => {
-    for (const hostname of ['127.0.0.1:4318', 'localhost', 'evil.example', 'dsh.example.com.evil.example', 'DSH.EXAMPLE.COM']) {
+  it('refuses to listen without a test identity source', async () => {
+    const { NativeApi } = await import('../src/http/server.ts');
+    const bare = new NativeApi({ proof: host.proof, routes: [], audit: host.audit, clock: host.clock });
+    await expect(bare.listen(0)).rejects.toThrow(/test identity/);
+  });
+
+  it('ignores Host: the peer key, not a name, identifies the host', async () => {
+    for (const hostname of ['127.0.0.1:4318', 'localhost', 'evil.example']) {
       const reply = await host.signed(phone, { method: 'GET', target: '/v1/meta', host: hostname });
-      expect(reply.status, hostname).toBe(404);
+      expect(reply.status, hostname).toBe(200);
     }
   });
 
   it('refuses duplicated security headers', async () => {
     const headers = phone.proofHeaders('GET', '/v1/meta', Buffer.alloc(0));
-    for (const name of [HEADERS.signature, HEADERS.deviceId, HEADERS.accessAssertion]) {
-      const value = name === HEADERS.accessAssertion ? await host.issuer.assertion() : headers[name]!;
+    for (const name of [HEADERS.signature, HEADERS.deviceId, HEADERS.nonce]) {
+      const value = headers[name]!;
       const reply = await host.signed(phone, { method: 'GET', target: '/v1/meta', headers: { [name]: [value, value] } });
       expect(reply.status, name).toBe(400);
     }
@@ -87,10 +93,9 @@ describe('bodies', () => {
   });
 
   it('refuses an oversized declared body without reading it', async () => {
-    const assertion = await host.issuer.assertion();
     const response = await raw(
       host.port,
-      `POST /v1/pair/redeem HTTP/1.1\r\nhost: dsh.example.com\r\n${HEADERS.accessAssertion}: ${assertion}\r\ncontent-type: application/json\r\ncontent-length: 70000\r\n\r\n{`,
+      `POST /v1/pair/redeem HTTP/1.1\r\nhost: dsh.example.com\r\n${TEST_PEER_HEADER}: ${phone.peerId}\r\ncontent-type: application/json\r\ncontent-length: 70000\r\n\r\n{`,
     );
     expect(response.startsWith('HTTP/1.1 413')).toBe(true);
   });
@@ -123,22 +128,21 @@ describe('bodies', () => {
 });
 
 describe('responses', () => {
-  it('are no-store, nosniff, carry a request id and never include the assertion', async () => {
-    const assertion = await host.issuer.assertion();
-    const reply = await host.signed(phone, { method: 'GET', target: '/v1/meta', headers: { [HEADERS.accessAssertion]: assertion } });
+  it('are no-store, nosniff and carry a request id', async () => {
+    const reply = await host.signed(phone, { method: 'GET', target: '/v1/meta' });
     expect(reply.headers['cache-control']).toBe('no-store');
     expect(reply.headers['x-content-type-options']).toBe('nosniff');
     expect(reply.headers['x-dsh-request-id']).toMatch(/^trace_/);
-    expect(reply.text).not.toContain(assertion);
     expect(isValid('Meta', reply.json)).toBe(true);
+    expect(reply.json.hostId).toBe(host.hostKey.endpointId);
   });
 
-  it('audit entries carry ids and codes, never tokens', async () => {
-    const assertion = await host.issuer.assertion();
-    await host.signed(phone, { method: 'GET', target: '/v1/meta', headers: { [HEADERS.accessAssertion]: assertion } });
-    await host.call({ method: 'GET', target: '/v1/meta', assertion: 'garbage' });
+  it('audit entries carry ids and codes, never keys or signatures', async () => {
+    const headers = phone.proofHeaders('GET', '/v1/meta', Buffer.alloc(0));
+    await host.call({ method: 'GET', target: '/v1/meta', peer: phone.peerId, headers });
+    await host.call({ method: 'GET', target: '/v1/meta', peer: null });
     const text = JSON.stringify(host.audit.entries);
-    expect(text).not.toContain(assertion);
+    expect(text).not.toContain(headers[HEADERS.signature]!);
     expect(text).not.toContain(phone.publicKey);
     expect(host.audit.entries.some((e) => e.code === 'UNAUTHENTICATED')).toBe(true);
   });

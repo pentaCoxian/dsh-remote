@@ -18,7 +18,7 @@ const HELP = `Usage: dsh-remote <command>
   revoke <deviceId>           revoke a phone and close its connections
   publish <sessionId>         allow phones to see and control a session
   unpublish <sessionId>       stop remote access to a session (local work continues)
-  doctor                      check configuration, tunnel and Access without changing anything
+  doctor                      check the host, its state and its reachability without changing anything
 `;
 
 async function main(argv: string[]): Promise<number> {
@@ -41,7 +41,7 @@ async function main(argv: string[]): Promise<number> {
         return 0;
       case 'devices':
         for (const d of await client.call<DeviceSummary[]>({ method: 'devices' })) {
-          process.stdout.write(`${d.revoked ? '[revoked] ' : ''}${d.label}  ${d.deviceId}  ${d.platform}  key ${d.shortFingerprint}  ${d.accessEmail}\n`);
+          process.stdout.write(`${d.revoked ? '[revoked] ' : ''}${d.label}  ${d.deviceId}  ${d.platform}  key ${d.shortFingerprint}  peer ${d.peer}\n`);
         }
         return 0;
       case 'revoke': {
@@ -69,7 +69,7 @@ async function main(argv: string[]): Promise<number> {
 async function pair(client: AdminClient, sessionId: string | undefined): Promise<number> {
   const offer = await client.call<PairingOffer>(sessionId === undefined ? { method: 'offerPairing' } : { method: 'offerPairing', sessionId });
   process.stdout.write(`\n${await QRCode.toString(offer.url, { type: 'terminal', small: true })}\n`);
-  process.stdout.write(`Scan with DSH Remote → Connect Host. Host key ${offer.hostKeyFingerprint.slice(0, 16).replace(/(.{4})(?!$)/g, '$1 ')}\n`);
+  process.stdout.write(`Scan with DSH Remote → Connect Host. Host ${offer.hostId.slice(0, 10)}\n`);
   process.stdout.write(`Waiting for a phone (code expires at ${new Date(offer.expiresAt).toLocaleTimeString()})…\n`);
   const deadline = offer.expiresAt + 5 * 60_000;
   let request: PendingPairing | undefined;
@@ -82,8 +82,8 @@ async function pair(client: AdminClient, sessionId: string | undefined): Promise
     request = (await client.call<PendingPairing[]>({ method: 'pendingPairings' })).find((r) => r.challengeId === offer.challengeId);
   }
   process.stdout.write(
-    `\nPairing request\n  Access identity  ${request.accessEmail}\n  Phone            ${request.deviceLabel} (${request.platform}${request.hardwareBacked ? ', hardware key' : ', software key'})\n` +
-      `  Key fingerprint  ${request.shortFingerprint}\nCompare the fingerprint with the one the phone shows.\n`,
+    `\nPairing request\n  Phone            ${request.deviceLabel} (${request.platform}${request.hardwareBacked ? ', hardware key' : ', software key'})\n` +
+      `  Key fingerprint  ${request.shortFingerprint}\n  Phone peer id    ${request.peer}\nCompare the fingerprint with the one the phone shows.\n`,
   );
   const prompt = createInterface({ input: process.stdin, output: process.stdout });
   const answer = (await prompt.question('Approve this device? [y/N] ')).trim().toLowerCase();

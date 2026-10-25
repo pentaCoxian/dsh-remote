@@ -1,12 +1,11 @@
-import { grantSigningString, importP256PublicKey, verifyP256Signature } from '@dsh-remote/protocol';
+import { isValid } from '@dsh-remote/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ManualClock } from '../src/core/clock.ts';
-import { HostIdentity } from '../src/core/host-identity.ts';
 import { Pairing } from '../src/core/pairing.ts';
 import { HostState } from '../src/core/state.ts';
 import { MemoryStore } from '../src/core/store.ts';
 import { startTestHost, type TestHost } from './helpers/host.ts';
-import { TestPhone } from './helpers/phone.ts';
+import { randomPeerId, TestPhone } from './helpers/phone.ts';
 
 let host: TestHost;
 beforeEach(async () => {
@@ -19,12 +18,12 @@ function redeemBody(phone: TestPhone, challengeId: string) {
 }
 
 describe('pairing over the native API', () => {
-  it('pairs end to end and the phone can verify the host-signed grant', async () => {
+  it('pairs end to end and binds the grant to the phone key and peer', async () => {
     const phone = new TestPhone();
     const challenge = host.pairing.createChallenge('session-1');
     const redeem = await host.signed(phone, { method: 'POST', target: '/v1/pair/redeem', body: redeemBody(phone, challenge.challengeId) });
     expect(redeem.status).toBe(201);
-    expect(redeem.json.hostKey.fingerprint).toBe(host.identity.fingerprint);
+    expect(isValid('PairRedeemResponse', redeem.json)).toBe(true);
 
     const statusTarget = `/v1/pair/requests/${redeem.json.pairingRequestId}`;
     const pending = await host.signed(phone, { method: 'GET', target: statusTarget });
@@ -35,14 +34,21 @@ describe('pairing over the native API', () => {
     const approved = await host.signed(phone, { method: 'GET', target: statusTarget });
     expect(approved.json.state).toBe('approved');
     const { grant } = approved.json;
+    expect(isValid('PairStatusResponse', approved.json)).toBe(true);
+    expect(grant.hostId).toBe(host.hostKey.endpointId);
     expect(grant.deviceKeyFingerprint).toBe(phone.fingerprint);
+    expect(host.state.device(grant.deviceId)?.peerId).toBe(phone.peerId);
+  });
 
-    // What the app does: trust only the host key whose fingerprint the QR showed.
-    const hostKey = importP256PublicKey(redeem.json.hostKey.publicKey)!;
-    const qrFingerprint = host.identity.fingerprint;
-    expect(hostKey.fingerprint).toBe(qrFingerprint);
-    const signingString = grantSigningString({ ...grant, pairingRequestId: redeem.json.pairingRequestId });
-    expect(verifyP256Signature(hostKey.key, signingString, grant.signature)).toBe(true);
+  it('limits redeems across peers, since peer keys cost nothing', async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 31; i += 1) {
+      const phone = new TestPhone();
+      const reply = await host.signed(phone, { method: 'POST', target: '/v1/pair/redeem', body: redeemBody(phone, 'chl_nonexistentnonexistent00') });
+      statuses.push(reply.status);
+    }
+    expect(statuses.slice(0, 30).every((status) => status === 404)).toBe(true);
+    expect(statuses[30]).toBe(429);
   });
 
   it('uses a challenge once, even under parallel redemption', async () => {
@@ -75,21 +81,22 @@ describe('pairing over the native API', () => {
     expect(honest.json.error.code).toBe('CHALLENGE_INVALID');
   });
 
-  it('rate-limits redemption per Access principal', async () => {
+  it('rate-limits redemption per peer', async () => {
     const statuses: number[] = [];
+    const peer = randomPeerId();
     for (let i = 0; i < 11; i += 1) {
       const phone = new TestPhone();
-      statuses.push((await host.signed(phone, { method: 'POST', target: '/v1/pair/redeem', body: redeemBody(phone, `chl_${'x'.repeat(24)}`) })).status);
+      statuses.push((await host.signed(phone, { method: 'POST', target: '/v1/pair/redeem', body: redeemBody(phone, `chl_${'x'.repeat(24)}`), peer })).status);
     }
     expect(statuses.slice(0, 10).every((s) => s === 404)).toBe(true);
     expect(statuses[10]).toBe(429);
   });
 
-  it('hides a pairing request from other principals', async () => {
+  it('hides a pairing request from other peers', async () => {
     const phone = new TestPhone();
     const challenge = host.pairing.createChallenge();
     const redeem = await host.signed(phone, { method: 'POST', target: '/v1/pair/redeem', body: redeemBody(phone, challenge.challengeId) });
-    const other = await host.signed(phone, { method: 'GET', target: `/v1/pair/requests/${redeem.json.pairingRequestId}`, sub: 'someone-else' });
+    const other = await host.signed(phone, { method: 'GET', target: `/v1/pair/requests/${redeem.json.pairingRequestId}`, peer: randomPeerId() });
     expect(other.status).toBe(404);
   });
 
@@ -115,10 +122,10 @@ describe('pairing lifetimes', () => {
   it('expires challenges after 120 s and unanswered requests after the approval window', async () => {
     const clock = new ManualClock();
     const state = await HostState.open(new MemoryStore(), clock);
-    const pairing = new Pairing(state, HostIdentity.generate(), clock, { grantTtlMs: 1_000, approvalTtlMs: 60_000 });
+    const pairing = new Pairing(state, randomPeerId(), clock, { grantTtlMs: 1_000, approvalTtlMs: 60_000 });
     const phone = new TestPhone();
     const prove = () => ({ ok: true }) as const;
-    const identity = { sub: 'user-0001', email: 'owner@example.com', exp: 0 };
+    const identity = { peerId: phone.peerId };
     const body = (challengeId: string) => ({ challengeId, publicKey: phone.publicKey, deviceLabel: 'p', platform: 'ios' as const, hardwareBacked: true });
 
     const stale = pairing.createChallenge();

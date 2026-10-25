@@ -2,10 +2,10 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { AdminSocket } from '../admin/socket.ts';
 import { runAdmin } from '../admin/ops.ts';
-import type { AccessVerifier } from '../core/access.ts';
 import { FileAudit } from '../core/audit.ts';
 import { systemClock } from '../core/clock.ts';
-import { HostIdentity } from '../core/host-identity.ts';
+import { HostKey } from '../core/host-key.ts';
+import { shortPeerId } from '../core/peer.ts';
 import type { ReceiptsDocument } from '../core/receipts.ts';
 import type { HostStateDocument } from '../core/state.ts';
 import { ensurePrivateDir, JsonFileStore } from '../core/store.ts';
@@ -39,7 +39,7 @@ export function registerCommands(ctx: DshContext, runtime: RcRuntime): void {
  * Start DSH Remote inside a DSH host. Failures are reported through `/rc`
  * rather than taking the plugin down, so the owner sees what to fix.
  */
-export function startRemote(ctx: DshContext, config: PluginConfig, access: AccessVerifier, runtime: RcRuntime, entry: 'production' | 'test-harness' = 'production', dir = stateDir()): void {
+export function startRemote(ctx: DshContext, config: PluginConfig, runtime: RcRuntime, entry: 'production' | 'test-harness' = 'production', dir = stateDir()): void {
   ctx.effect(async () => {
     let host: RemoteHost | undefined;
     let adapter: DshAdapter | undefined;
@@ -50,19 +50,16 @@ export function startRemote(ctx: DshContext, config: PluginConfig, access: Acces
       const audit = new FileAudit(join(dir, 'audit.jsonl'), clock);
       host = await RemoteHost.create({
         adapter: (state) => (adapter = new DshAdapter(ctx, state)),
-        access,
         clock,
-        identity: await HostIdentity.loadOrCreate(join(dir, 'host-key.pem')),
+        hostKey: await HostKey.loadOrCreate(join(dir, 'endpoint-key')),
         stateStore: new JsonFileStore<HostStateDocument>(join(dir, 'state.json')),
         receiptsStore: new JsonFileStore<ReceiptsDocument>(join(dir, 'receipts.json')),
         audit,
-        publicHost: config.publicHost,
-        linkOrigin: config.linkOrigin,
-        port: config.port,
+        iroh: { relays: config.relays },
         hostName: config.hostName,
         grantTtlMs: config.grantTtlDays * 86_400_000,
         remoteApprovalTimeoutMs: config.remoteApprovalTimeoutSec * 1000,
-        diagnostics: { teamName: config.access.teamName, entry },
+        entry,
       });
       const started = host;
       const binding = adapter!;
@@ -76,7 +73,9 @@ export function startRemote(ctx: DshContext, config: PluginConfig, access: Acces
       cleanup.push(disposeRoute);
       runtime.host = started;
       runtime.problems = [];
-      ctx.logger?.info(`dsh-remote: serving https://${config.publicHost} on 127.0.0.1:${started.port}`);
+      const online = await started.endpoint!.online(10_000);
+      const relay = started.endpoint!.homeRelay();
+      ctx.logger?.info(`dsh-remote: host ${shortPeerId(started.hostId)} is ${relay !== null ? `reachable through ${relay}` : config.relays.length === 0 ? 'reachable on direct addresses only' : online ? 'online' : 'not yet connected to a relay'}`);
     } catch (error) {
       runtime.problems = [`could not start: ${error instanceof Error ? error.message : String(error)}`];
       ctx.logger?.error(`dsh-remote: ${runtime.problems[0]}`);

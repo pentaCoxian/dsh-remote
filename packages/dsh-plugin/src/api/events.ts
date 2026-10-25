@@ -2,7 +2,6 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { CLOSE_CODES, decodeCursor, isValid, LIMITS, PROTOCOL_VERSION } from '@dsh-remote/protocol';
 import { WebSocketServer, type WebSocket } from 'ws';
-import type { AccessIdentity } from '../core/access.ts';
 import type { Approvals, RemoteApproval } from '../core/approvals.ts';
 import type { Clock } from '../core/clock.ts';
 import type { EventHub, FeedSink } from '../core/events.ts';
@@ -33,13 +32,12 @@ class Client implements FeedSink {
   private alive = true;
   private ephemeralCounter = 0;
 
-  constructor(ws: WebSocket, device: DeviceRecord, identity: AccessIdentity, owner: EventsSocket) {
+  constructor(ws: WebSocket, device: DeviceRecord, owner: EventsSocket) {
     this.ws = ws;
     this.device = device;
     this.owner = owner;
     const now = owner.deps.clock.now();
-    // The Access assertion only covered the upgrade; close when it (or the grant) lapses.
-    this.timers.push(setTimeout(() => this.close(CLOSE_CODES.authExpired, 'access expired'), Math.max(0, identity.exp * 1000 - now)));
+    // The grant was checked at the upgrade; close when it lapses.
     this.timers.push(setTimeout(() => this.close(CLOSE_CODES.deviceRevoked, 'grant expired'), Math.max(0, Math.min(device.expiresAt - now, 2 ** 31 - 1))));
     const heartbeat = setInterval(() => {
       if (!this.alive) {
@@ -180,7 +178,7 @@ export class EventsSocket {
     scope: 'session:read',
     handle: (ctx: DeviceContext, req: IncomingMessage, socket: Duplex, head: Buffer) => {
       this.wss.handleUpgrade(req, socket, head, (ws) => {
-        this.clients.add(new Client(ws, ctx.device, ctx.identity, this));
+        this.clients.add(new Client(ws, ctx.device, this));
       });
     },
   };

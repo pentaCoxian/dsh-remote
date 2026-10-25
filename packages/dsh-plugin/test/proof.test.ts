@@ -19,21 +19,21 @@ describe('request proof on a paired device', () => {
   it('serves /v1/meta to a paired device', async () => {
     const reply = await host.signed(phone, meta);
     expect(reply.status).toBe(200);
-    expect(reply.json).toMatchObject({ v: 1, hostId: host.state.hostId, device: { deviceId: phone.deviceId } });
+    expect(reply.json).toMatchObject({ v: 1, hostId: host.hostKey.endpointId, device: { deviceId: phone.deviceId } });
   });
 
-  it('requires Access identity even with a valid device signature', async () => {
+  it('requires a peer identity even with a valid device signature', async () => {
     const headers = phone.proofHeaders('GET', '/v1/meta', Buffer.alloc(0));
-    const reply = await host.call({ ...meta, assertion: null, headers });
+    const reply = await host.call({ ...meta, peer: null, headers });
     expect(reply.status).toBe(401);
     expect(reply.json.error.code).toBe('UNAUTHENTICATED');
   });
 
-  it('requires a device signature even with valid Access identity', async () => {
-    const reply = await host.call(meta);
+  it('requires a device signature even from the paired peer', async () => {
+    const reply = await host.call({ ...meta, peer: phone.peerId });
     expect(reply.status).toBe(426);
     expect(reply.json.error.code).toBe('PROTOCOL_UNSUPPORTED');
-    const noSignature = await host.call({ ...meta, headers: { [HEADERS.protocol]: '1', [HEADERS.deviceId]: phone.deviceId } });
+    const noSignature = await host.call({ ...meta, peer: phone.peerId, headers: { [HEADERS.protocol]: '1', [HEADERS.deviceId]: phone.deviceId } });
     expect(noSignature.json.error.code).toBe('SIGNATURE_INVALID');
   });
 
@@ -51,13 +51,13 @@ describe('request proof on a paired device', () => {
   it('refuses a signature from a different key', async () => {
     const other = new TestPhone();
     other.deviceId = phone.deviceId;
-    const reply = await host.signed(other, meta);
+    const reply = await host.signed(other, { ...meta, peer: phone.peerId });
     expect(reply.status).toBe(401);
     expect(reply.json.error.code).toBe('SIGNATURE_INVALID');
   });
 
-  it('binds the grant to the Access principal that paired it', async () => {
-    const reply = await host.signed(phone, { ...meta, sub: 'someone-else' });
+  it('binds the grant to the peer key that paired it', async () => {
+    const reply = await host.signed(phone, { ...meta, peer: new TestPhone().peerId });
     expect(reply.status).toBe(403);
     expect(reply.json.error.code).toBe('ACCESS_DENIED');
   });
@@ -116,7 +116,7 @@ describe('request proof on a paired device', () => {
 
   it('refuses a signature over a different target', async () => {
     const headers = phone.proofHeaders('GET', '/v1/meta?x=1', Buffer.alloc(0));
-    const reply = await host.call({ ...meta, headers });
+    const reply = await host.call({ ...meta, peer: phone.peerId, headers });
     expect(reply.json.error.code).toBe('SIGNATURE_INVALID');
   });
 

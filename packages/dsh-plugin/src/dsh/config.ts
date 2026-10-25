@@ -1,23 +1,27 @@
 import { hostname } from 'node:os';
-import { canonicalHttpsOrigin } from '@dsh-remote/protocol';
 
 /** The `config:` block of the plugin's `cordis.patch.yml` entry. */
 export interface PluginConfig {
-  /** Access-protected API hostname routed by cloudflared to 127.0.0.1:port. */
-  readonly publicHost: string;
-  /** Public static link host (app-link association files + OAuth callback). */
-  readonly linkOrigin: string;
-  readonly access: { readonly teamName: string; readonly audTags: readonly string[] };
   readonly hostName: string;
-  readonly port: number;
+  /** iroh relay URLs. `[]` disables relays: phones then reach the host only on direct or LAN addresses. */
+  readonly relays: readonly string[];
   readonly grantTtlDays: number;
   readonly remoteApprovalTimeoutSec: number;
 }
 
-const HOSTNAME = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
-const TEAM_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;
-const AUD_TAG = /^[a-f0-9]{64}$/;
-const LABEL = /^[^\x00-\x1f\x7f]{1,64}$/;
+/** n0's public relays, until the DSH Remote relays are live. */
+export const DEFAULT_RELAYS: readonly string[] = [
+  'https://aps1-1.relay.n0.iroh.link./',
+  'https://euc1-1.relay.n0.iroh.link./',
+  'https://use1-1.relay.n0.iroh.link./',
+  'https://usw1-1.relay.n0.iroh.link./',
+];
+
+const LABEL = /^[^\x00-\x1f\x7f]{1,64}$/u;
+const KNOWN = new Set(['hostName', 'relays', 'grantTtlDays', 'remoteApprovalTimeoutSec']);
+/** Sprint 1 settings for the Cloudflare transport. */
+const RETIRED = new Set(['publicHost', 'linkOrigin', 'access', 'port']);
+const MAX_RELAYS = 8;
 
 function integer(value: unknown, fallback: number, min: number, max: number, name: string, problems: string[]): number {
   if (value === undefined) return fallback;
@@ -28,28 +32,33 @@ function integer(value: unknown, fallback: number, min: number, max: number, nam
   return value;
 }
 
+/** A bare `https://host[:port]/` relay URL: no credentials, path, query or fragment. */
+function isRelayUrl(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length > 256) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && url.username === '' && url.password === '' && url.pathname === '/' && url.search === '' && url.hash === '';
+  } catch {
+    return false;
+  }
+}
+
 /** Validate the raw plugin config; every problem is reported at once. */
 export function parseConfig(raw: unknown): { ok: true; config: PluginConfig } | { ok: false; problems: string[] } {
   const input = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
   const problems: string[] = [];
-  const publicHost = typeof input.publicHost === 'string' ? input.publicHost : '';
-  if (!HOSTNAME.test(publicHost)) problems.push('publicHost must be a lowercase hostname such as dsh.example.com');
-  const linkOrigin = typeof input.linkOrigin === 'string' ? canonicalHttpsOrigin(input.linkOrigin) : undefined;
-  if (linkOrigin === undefined) problems.push('linkOrigin must be a bare https origin such as https://link.example.com');
-  else if (new URL(linkOrigin).hostname === publicHost) problems.push('linkOrigin must use a different hostname than publicHost');
-  const access = (typeof input.access === 'object' && input.access !== null ? input.access : {}) as Record<string, unknown>;
-  const teamName = typeof access.teamName === 'string' ? access.teamName : '';
-  if (!TEAM_NAME.test(teamName)) problems.push('access.teamName must be your Zero Trust team name (the <team> in <team>.cloudflareaccess.com)');
-  const audTags = Array.isArray(access.audTags) ? access.audTags : [];
-  if (audTags.length === 0 || !audTags.every((tag) => typeof tag === 'string' && AUD_TAG.test(tag))) problems.push('access.audTags must list the Access application AUD tag(s)');
+  for (const key of Object.keys(input)) {
+    if (RETIRED.has(key)) problems.push(`${key} is no longer used: DSH Remote now connects over iroh, without Cloudflare. Remove it.`);
+    else if (!KNOWN.has(key)) problems.push(`unknown setting ${key}`);
+  }
   const hostName = input.hostName === undefined ? hostname().slice(0, 64) : input.hostName;
   if (typeof hostName !== 'string' || !LABEL.test(hostName)) problems.push('hostName must be 1-64 printable characters');
-  const port = integer(input.port, 4318, 1024, 65535, 'port', problems);
+  const relays = input.relays === undefined ? DEFAULT_RELAYS : input.relays;
+  if (!Array.isArray(relays) || relays.length > MAX_RELAYS || !relays.every(isRelayUrl)) {
+    problems.push(`relays must list at most ${MAX_RELAYS} bare https URLs (or [] for direct connections only)`);
+  }
   const grantTtlDays = integer(input.grantTtlDays, 90, 1, 365, 'grantTtlDays', problems);
   const remoteApprovalTimeoutSec = integer(input.remoteApprovalTimeoutSec, 900, 10, 86_400, 'remoteApprovalTimeoutSec', problems);
   if (problems.length > 0) return { ok: false, problems };
-  return {
-    ok: true,
-    config: { publicHost, linkOrigin: linkOrigin!, access: { teamName, audTags: audTags as string[] }, hostName: hostName as string, port, grantTtlDays, remoteApprovalTimeoutSec },
-  };
+  return { ok: true, config: { hostName: hostName as string, relays: [...(relays as string[])], grantTtlDays, remoteApprovalTimeoutSec } };
 }

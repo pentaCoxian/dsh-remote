@@ -1,6 +1,19 @@
 import { generateKeyPairSync, randomBytes, sign, type KeyObject } from 'node:crypto';
-import { request } from 'node:http';
+import { request, type IncomingMessage } from 'node:http';
 import { canonicalRequestString, HEADERS, PENDING_DEVICE_ID, sha256Hex, spkiFingerprint } from '@dsh-remote/protocol';
+import { isPeerId, type PeerIdentity } from '../../src/core/peer.ts';
+
+/** Loopback test transport only: the peer a request claims to come from. Over iroh, QUIC supplies it. */
+export const TEST_PEER_HEADER = 'x-dsh-test-peer';
+
+export function testPeerIdentity(req: IncomingMessage): PeerIdentity | undefined {
+  const value = req.headers[TEST_PEER_HEADER];
+  return typeof value === 'string' && isPeerId(value) ? { peerId: value } : undefined;
+}
+
+export function randomPeerId(): string {
+  return randomBytes(32).toString('hex');
+}
 
 export interface SignOptions {
   readonly timestampMs?: number;
@@ -10,8 +23,9 @@ export interface SignOptions {
   readonly deviceId?: string;
 }
 
-/** Plays the phone: a software P-256 key that signs requests exactly like the app. */
+/** Plays the phone: an iroh peer id plus a software P-256 key that signs requests exactly like the app. */
 export class TestPhone {
+  readonly peerId = randomPeerId();
   readonly publicKey: string;
   readonly fingerprint: string;
   deviceId: string = PENDING_DEVICE_ID;
@@ -61,7 +75,7 @@ export function toBody(body: SendOptions['body']): Buffer {
   return Buffer.from(typeof body === 'string' ? body : JSON.stringify(body), 'utf8');
 }
 
-/** Raw HTTP so tests control Host and duplicate headers (fetch cannot). */
+/** Raw HTTP so tests control duplicate headers (fetch cannot). */
 export function send(port: number, options: SendOptions): Promise<Reply> {
   const body = toBody(options.body);
   return new Promise((resolve, reject) => {

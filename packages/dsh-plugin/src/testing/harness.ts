@@ -1,13 +1,11 @@
 /**
  * TEST-ONLY entry (`@dsh-remote/dsh-plugin/testing`) for `pnpm test:dsh`.
- * Identical to the production entry except that Access assertions are checked
- * against a local test issuer. `dsh-remote doctor` fails if this entry runs.
- * It also makes every `glob` tool call ask for approval and seeds one session.
+ * The production entry plus test fixtures: every `glob` tool call asks for
+ * approval and one session is seeded and published. `dsh-remote doctor` fails
+ * if this entry runs.
  */
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createRemoteJWKSet } from 'jose';
-import { createAccessVerifier } from '../core/access.ts';
 import type { RcRuntime } from '../dsh/commands.ts';
 import { parseConfig } from '../dsh/config.ts';
 import { registerCommands, startRemote, stateDir } from '../dsh/plugin.ts';
@@ -22,15 +20,11 @@ interface HarnessContext extends DshContext {
 }
 
 export function apply(ctx: HarnessContext, rawConfig: unknown): void {
-  const issuer = process.env.DSH_REMOTE_TEST_ISSUER;
-  const jwks = process.env.DSH_REMOTE_TEST_JWKS;
-  const audience = process.env.DSH_REMOTE_TEST_AUD;
-  if (issuer === undefined || jwks === undefined || audience === undefined) throw new Error('dsh-remote test harness: DSH_REMOTE_TEST_* is not set');
   const parsed = parseConfig(rawConfig);
   if (!parsed.ok) throw new Error(`dsh-remote test harness: ${parsed.problems.join('; ')}`);
   const runtime: RcRuntime = { host: undefined, problems: [], hostName: parsed.config.hostName };
   registerCommands(ctx, runtime);
-  startRemote(ctx, parsed.config, createAccessVerifier({ issuer, audiences: [audience], keys: createRemoteJWKSet(new URL(jwks)) }), runtime, 'test-harness');
+  startRemote(ctx, parsed.config, runtime, 'test-harness');
 
   ctx.effect(() => ctx.on('tools/pre-execute', async (exec: { name: string }, next: () => Promise<unknown>) => (exec.name === 'glob' ? { kind: 'ask', reason: 'harness: glob needs approval' } : next())), 'dsh-remote harness: glob asks');
 

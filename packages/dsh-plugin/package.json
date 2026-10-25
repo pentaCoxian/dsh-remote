@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "DSH Remote: continue a DeepSeek Harness session from a native phone app over Cloudflare Tunnel + Access",
+  "description": "DSH Remote: continue a DeepSeek Harness session from the native phone app over an end-to-end encrypted iroh connection",
   "engines": {
     "node": ">=24.9",
     "dsh": "0.2.1-rc.3"
@@ -41,9 +41,9 @@
   },
   "dependencies": {
     "@dsh-remote/protocol": "workspace:*",
-    "jose": "6.2.13",
-    "ws": "8.22.0",
-    "qrcode": "1.5.4"
+    "@number0/iroh": "1.2.0",
+    "qrcode": "1.5.4",
+    "ws": "8.22.0"
   },
   "devDependencies": {
     "@types/node": "24.19.2",

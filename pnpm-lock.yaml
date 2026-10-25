@@ -13,9 +13,9 @@ importers:
       '@dsh-remote/protocol':
         specifier: workspace:*
         version: link:../protocol
-      jose:
-        specifier: 6.2.13
-        version: 6.2.13
+      '@number0/iroh':
+        specifier: 1.2.0
+        version: 1.2.0
       qrcode:
         specifier: 1.5.4
         version: 1.5.4

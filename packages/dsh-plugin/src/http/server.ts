@@ -1,17 +1,16 @@
 import { createServer, STATUS_CODES, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import type { Socket } from 'node:net';
 import type { Duplex } from 'node:stream';
 import { ERRORS, errorEnvelope, HEADERS, isValid, LIMITS, type ErrorCode, type SchemaName, type Scope } from '@dsh-remote/protocol';
-import type { AccessIdentity, AccessVerifier } from '../core/access.ts';
 import type { Audit } from '../core/audit.ts';
 import type { Clock } from '../core/clock.ts';
 import { randomId } from '../core/ids.ts';
+import type { PeerIdentity } from '../core/peer.ts';
 import type { ProofHeaders, ProofVerifier, SignedRequest } from '../core/proof.ts';
 import type { DeviceRecord } from '../core/state.ts';
 import { matchPattern, parseTarget, type ParsedTarget } from './target.ts';
 
 const MESSAGES: Partial<Record<ErrorCode, string>> = {
-  UNAUTHENTICATED: 'Sign in again to continue',
+  UNAUTHENTICATED: 'Connect through the DSH Remote app',
   DEVICE_UNPAIRED: 'Pair this phone on the host',
   DEVICE_REVOKED: 'Access removed by the host',
   TIMESTAMP_SKEW: 'Request clock is out of range',
@@ -36,7 +35,7 @@ export interface RequestContext {
   readonly requestId: string;
   readonly params: Readonly<Record<string, string>>;
   readonly query: ReadonlyMap<string, string>;
-  readonly identity: AccessIdentity;
+  readonly identity: PeerIdentity;
   readonly body: unknown;
   /** The request as signed, for routes that verify a pending key themselves. */
   readonly signed: SignedRequest;
@@ -60,7 +59,7 @@ interface RouteBase {
 }
 export type Route =
   | (RouteBase & { readonly auth: 'device'; readonly scope: Scope; handle(ctx: DeviceContext): Promise<Reply> })
-  /** Pairing routes: Access identity only; the handler proves the phone's new key itself. */
+  /** Pairing routes: peer identity only; the handler proves the phone's new key itself. */
   | (RouteBase & { readonly auth: 'pending'; handle(ctx: RequestContext): Promise<Reply> });
 
 export interface UpgradeRoute {
@@ -70,15 +69,17 @@ export interface UpgradeRoute {
 }
 
 export interface NativeApiOptions {
-  /** Public API hostname the tunnel forwards (`Host` must equal it exactly). */
-  readonly publicHost: string;
-  readonly port: number;
-  readonly access: AccessVerifier;
   readonly proof: ProofVerifier;
   readonly routes: readonly Route[];
   readonly upgrade?: UpgradeRoute;
   readonly audit: Audit;
   readonly clock: Clock;
+  /**
+   * TESTS AND THE DEV HOST ONLY: the peer identity of a loopback TCP request,
+   * which carries no QUIC key. Without it `listen` refuses to start, so
+   * production serves authenticated iroh streams and nothing else.
+   */
+  readonly loopbackIdentity?: (req: IncomingMessage) => PeerIdentity | undefined;
 }
 
 /** Headers that must appear at most once; Node would otherwise join duplicates. */
@@ -88,7 +89,6 @@ const SINGLE_HEADERS = new Set([
   'content-type',
   'transfer-encoding',
   'authorization',
-  HEADERS.accessAssertion,
   HEADERS.protocol,
   HEADERS.deviceId,
   HEADERS.timestamp,
@@ -122,6 +122,9 @@ function proofHeaders(req: IncomingMessage): ProofHeaders {
   };
 }
 
+/** Open HTTP connections (iroh streams plus any loopback sockets). */
+const MAX_CONNECTIONS = 64;
+
 const JSON_TYPE = /^application\/json(\s*;\s*charset=utf-8)?$/i;
 
 async function readBody(req: IncomingMessage): Promise<Buffer> {
@@ -145,13 +148,14 @@ function hasBody(req: IncomingMessage): boolean {
 }
 
 /**
- * The plugin's own loopback listener behind cloudflared. Every request needs a
- * verified Access assertion, and every route except pairing needs a paired
- * device's signature. It serves only its route table: no proxy, no files.
+ * The native API over iroh streams. Each stream arrives already tagged with
+ * the peer key QUIC authenticated; every route except pairing also needs a
+ * paired device's signature. It serves only its route table: no proxy, no files.
  */
 export class NativeApi {
   private readonly server: Server;
-  private readonly sockets = new Set<Socket>();
+  private readonly sockets = new Set<Duplex>();
+  private readonly peers = new WeakMap<Duplex, PeerIdentity>();
   private readonly compiled: { route: Route; pattern: string[] }[];
 
   private readonly options: NativeApiOptions;
@@ -162,7 +166,7 @@ export class NativeApi {
     this.server = createServer({ maxHeaderSize: 16 * 1024, requestTimeout: 10_000, headersTimeout: 10_000, keepAliveTimeout: 5_000 }, (req, res) => {
       void this.handle(req, res);
     });
-    this.server.maxConnections = 64;
+    this.server.maxConnections = MAX_CONNECTIONS;
     this.server.on('connection', (socket) => {
       this.sockets.add(socket);
       socket.once('close', () => this.sockets.delete(socket));
@@ -176,20 +180,34 @@ export class NativeApi {
     });
   }
 
-  /** Bind 127.0.0.1 only; retries briefly so a hot reload can reclaim the port. */
-  async listen(): Promise<number> {
+  /** Serve one iroh bi-stream as an HTTP connection from `peer`. */
+  accept(stream: Duplex, peer: PeerIdentity): void {
+    if (this.sockets.size >= MAX_CONNECTIONS) {
+      stream.destroy();
+      return;
+    }
+    this.peers.set(stream, peer);
+    this.server.emit('connection', stream);
+  }
+
+  /**
+   * TESTS AND THE DEV HOST ONLY: also listen on 127.0.0.1 (never another
+   * address). Retries briefly so a hot reload can reclaim the port.
+   */
+  async listen(port: number): Promise<number> {
+    if (this.options.loopbackIdentity === undefined) throw new Error('native api: loopback listening needs a test identity source');
     for (let attempt = 0; ; attempt += 1) {
       try {
         await new Promise<void>((resolve, reject) => {
           const onError = (error: Error) => reject(error);
           this.server.once('error', onError);
-          this.server.listen(this.options.port, '127.0.0.1', () => {
+          this.server.listen(port, '127.0.0.1', () => {
             this.server.off('error', onError);
             resolve();
           });
         });
         const address = this.server.address();
-        return typeof address === 'object' && address !== null ? address.port : this.options.port;
+        return typeof address === 'object' && address !== null ? address.port : port;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'EADDRINUSE' || attempt >= 10) throw error;
         await new Promise((resolve) => setTimeout(resolve, 300));
@@ -212,7 +230,7 @@ export class NativeApi {
     try {
       const { route, params, query } = this.findRoute(req);
       routeName = `${route.method} ${route.path}`;
-      const identity = await this.authenticate(req);
+      const identity = this.authenticate(req);
       if (route.body === undefined && hasBody(req)) throw new ApiError('BAD_REQUEST');
       const rawBody = route.body === undefined ? Buffer.alloc(0) : await readBody(req);
       const signed: SignedRequest = { method: req.method!, target: req.url!, body: rawBody, headers: proofHeaders(req), identity };
@@ -244,7 +262,7 @@ export class NativeApi {
     try {
       this.checkRequest(req);
       if (upgrade === undefined || req.url !== upgrade.path || req.method !== 'GET' || hasBody(req)) throw new ApiError('NOT_FOUND');
-      const identity = await this.authenticate(req);
+      const identity = this.authenticate(req);
       const signed: SignedRequest = { method: 'GET', target: req.url, body: Buffer.alloc(0), headers: proofHeaders(req), identity };
       const proof = this.options.proof.verifyDevice(signed, upgrade.scope);
       if (!proof.ok) throw new ApiError(proof.code, undefined, proof.serverTime === undefined ? {} : { serverTime: proof.serverTime });
@@ -262,10 +280,9 @@ export class NativeApi {
     }
   }
 
-  /** Duplicate headers, exact Host and the target grammar. */
+  /** Duplicate headers and the target grammar. `Host` means nothing over a key-dialed stream. */
   private checkRequest(req: IncomingMessage): ParsedTarget {
     if (hasDuplicateHeaders(req)) throw new ApiError('BAD_REQUEST');
-    if (header(req, 'host') !== this.options.publicHost) throw new ApiError('NOT_FOUND');
     const parsed = parseTarget(req.url ?? '');
     if (!parsed.ok) throw new ApiError(parsed.reason === 'query' ? 'BAD_REQUEST' : 'NOT_FOUND');
     return parsed.target;
@@ -283,10 +300,10 @@ export class NativeApi {
     throw new ApiError(pathMatched ? 'METHOD_NOT_ALLOWED' : 'NOT_FOUND');
   }
 
-  private async authenticate(req: IncomingMessage): Promise<AccessIdentity> {
-    const result = await this.options.access.verify(header(req, HEADERS.accessAssertion));
-    if (!result.ok) throw new ApiError('UNAUTHENTICATED');
-    return result.identity;
+  private authenticate(req: IncomingMessage): PeerIdentity {
+    const peer = this.peers.get(req.socket) ?? this.options.loopbackIdentity?.(req);
+    if (peer === undefined) throw new ApiError('UNAUTHENTICATED');
+    return peer;
   }
 
   private send(res: ServerResponse, status: number, body: unknown, requestId: string, close = false): void {

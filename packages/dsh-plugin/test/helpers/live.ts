@@ -1,23 +1,23 @@
-import { HEADERS, parsePairingUrl } from '@dsh-remote/protocol';
+import { parsePairingUrl } from '@dsh-remote/protocol';
 import WebSocket from 'ws';
 import { MemoryAudit } from '../../src/core/audit.ts';
 import { systemClock } from '../../src/core/clock.ts';
-import { HostIdentity } from '../../src/core/host-identity.ts';
+import { HostKey } from '../../src/core/host-key.ts';
 import { MemoryStore } from '../../src/core/store.ts';
 import { RemoteHost } from '../../src/host.ts';
 import { FakeAdapter } from '../../src/testing/fake-adapter.ts';
-import { testIssuer, type TestIssuer } from './access.ts';
-import { send, toBody, TestPhone, type Reply, type SendOptions } from './phone.ts';
+import { send, TEST_PEER_HEADER, testPeerIdentity, toBody, TestPhone, type Reply, type SendOptions } from './phone.ts';
 
 export interface LiveHost {
   readonly host: RemoteHost;
   readonly adapter: FakeAdapter;
-  readonly issuer: TestIssuer;
   readonly audit: MemoryAudit;
+  /** Loopback port; requests name their peer in a test header. */
   readonly port: number;
-  signed(phone: TestPhone, options: SendOptions & { sub?: string }): Promise<Reply>;
+  /** `port` sends through another loopback port, e.g. an iroh dialer's. */
+  signed(phone: TestPhone, options: SendOptions & { peer?: string; port?: number }): Promise<Reply>;
   pair(label?: string): Promise<TestPhone>;
-  socket(phone: TestPhone): Promise<TestSocket>;
+  socket(phone: TestPhone, port?: number): Promise<TestSocket>;
   close(): Promise<void>;
 }
 
@@ -30,23 +30,24 @@ export interface TestSocket {
   closed(): Promise<{ code: number; reason: string }>;
 }
 
-export async function startLiveHost(options: { remoteApprovalTimeoutMs?: number } = {}): Promise<LiveHost> {
-  const issuer = await testIssuer();
+/**
+ * RemoteHost on FakeAdapter over loopback. With `iroh`, the host also runs a
+ * real endpoint with relays off, bound to 127.0.0.1.
+ */
+export async function startLiveHost(options: { remoteApprovalTimeoutMs?: number; iroh?: boolean } = {}): Promise<LiveHost> {
   const adapter = new FakeAdapter();
   adapter.addSession('session-a', { cwd: '/home/me/secret-client/api', title: 'Refactor the API' });
   adapter.addSession('session-b', { cwd: '/home/me/other', title: 'Unpublished' });
   const audit = new MemoryAudit();
   const host = await RemoteHost.create({
     adapter,
-    access: issuer.verifier,
     clock: systemClock,
-    identity: HostIdentity.generate(),
+    hostKey: HostKey.generate(),
     stateStore: new MemoryStore(),
     receiptsStore: new MemoryStore(),
     audit,
-    publicHost: 'dsh.example.com',
-    linkOrigin: 'https://link.example.com',
-    port: 0,
+    loopback: { port: 0, identify: testPeerIdentity },
+    ...(options.iroh === true ? { iroh: { relays: [], bindAddr: '127.0.0.1:0' } } : {}),
     hostName: 'Home Lab',
     grantTtlMs: 90 * 24 * 3600_000,
     remoteApprovalTimeoutMs: options.remoteApprovalTimeoutMs ?? 2_000,
@@ -54,13 +55,12 @@ export async function startLiveHost(options: { remoteApprovalTimeoutMs?: number 
     bootMs: Date.now() - 5_000,
   });
   await host.publish('session-a');
-  const port = await host.start();
+  await host.start();
+  const port = host.port!;
   await waitFor(() => host.events.snapshot('session-a') !== undefined);
 
-  const signed: LiveHost['signed'] = async (phone, { sub, ...rest }) => {
-    const assertion = await issuer.assertion(sub === undefined ? {} : { sub });
-    return send(port, { ...rest, headers: { [HEADERS.accessAssertion]: assertion, ...phone.proofHeaders(rest.method, rest.target, toBody(rest.body)), ...rest.headers } });
-  };
+  const signed: LiveHost['signed'] = async (phone, { peer, port: via, ...rest }) =>
+    send(via ?? port, { ...rest, headers: { [TEST_PEER_HEADER]: peer ?? phone.peerId, ...phone.proofHeaders(rest.method, rest.target, toBody(rest.body)), ...rest.headers } });
 
   const pair: LiveHost['pair'] = async (label = 'Test Phone') => {
     const phone = new TestPhone();
@@ -74,10 +74,9 @@ export async function startLiveHost(options: { remoteApprovalTimeoutMs?: number 
     return phone;
   };
 
-  const socket: LiveHost['socket'] = async (phone) => {
-    const assertion = await issuer.assertion();
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/v1/events`, {
-      headers: { host: 'dsh.example.com', [HEADERS.accessAssertion]: assertion, ...phone.proofHeaders('GET', '/v1/events', Buffer.alloc(0)) },
+  const socket: LiveHost['socket'] = async (phone, via = port) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${via}/v1/events`, {
+      headers: { [TEST_PEER_HEADER]: phone.peerId, ...phone.proofHeaders('GET', '/v1/events', Buffer.alloc(0)) },
     });
     const frames: any[] = [];
     const consumed = new Set<any>();
@@ -117,7 +116,7 @@ export async function startLiveHost(options: { remoteApprovalTimeoutMs?: number 
     };
   };
 
-  return { host, adapter, issuer, audit, port, signed, pair, socket, close: () => host.stop() };
+  return { host, adapter, audit, port, signed, pair, socket, close: () => host.stop() };
 }
 
 export async function waitFor(condition: () => boolean, timeoutMs = 2_000): Promise<void> {

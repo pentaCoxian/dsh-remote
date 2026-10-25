@@ -1,10 +1,9 @@
 import type { KeyObject } from 'node:crypto';
 import { importP256PublicKey, LIMITS, SCOPES, type ErrorCode, type Scope } from '@dsh-remote/protocol';
-import type { AccessIdentity } from './access.ts';
 import type { Clock } from './clock.ts';
-import type { HostIdentity } from './host-identity.ts';
 import { randomId } from './ids.ts';
 import { RateLimiter } from './limits.ts';
+import type { PeerIdentity } from './peer.ts';
 import type { KeyProof } from './proof.ts';
 import type { DeviceRecord, HostState } from './state.ts';
 
@@ -17,21 +16,20 @@ export interface Challenge {
   failures: number;
 }
 
+/** Unsigned: it reaches the phone over the QUIC connection that authenticated `hostId`. */
 export interface DeviceGrant {
   readonly hostId: string;
   readonly deviceId: string;
   readonly deviceKeyFingerprint: string;
   readonly scopes: readonly Scope[];
   readonly expiresAt: number;
-  readonly signature: string;
 }
 
 export interface PairingRequest {
   readonly pairingRequestId: string;
   readonly challengeId: string;
   readonly sessionId?: string;
-  readonly accessSub: string;
-  readonly accessEmail: string;
+  readonly peerId: string;
   readonly deviceLabel: string;
   readonly platform: DeviceRecord['platform'];
   readonly hardwareBacked: boolean;
@@ -62,6 +60,8 @@ export interface PairingOptions {
 }
 
 const MAX_CHALLENGE_FAILURES = 3;
+/** Redeems across all peers: iroh keys cost nothing to mint, so per-peer limits alone are not enough. */
+const MAX_REDEEMS_PER_MINUTE = 30;
 
 /**
  * QR challenges, redemption and the pending requests the local owner approves.
@@ -71,23 +71,24 @@ const MAX_CHALLENGE_FAILURES = 3;
 export class Pairing {
   private readonly challenges = new Map<string, Challenge>();
   private readonly requests = new Map<string, PairingRequest>();
-  private readonly perPrincipal = new RateLimiter(10, 60_000);
+  private readonly perPeer = new RateLimiter(10, 60_000);
+  private readonly overall = new RateLimiter(MAX_REDEEMS_PER_MINUTE, 60_000);
   private readonly listeners = new Set<(request: PairingRequest) => void>();
   private readonly approvalTtlMs: number;
 
   private readonly state: HostState;
-  private readonly host: HostIdentity;
+  private readonly hostId: string;
   private readonly clock: Clock;
   private readonly options: PairingOptions;
 
   constructor(
     state: HostState,
-    host: HostIdentity,
+    hostId: string,
     clock: Clock,
     options: PairingOptions,
   ) {
     this.state = state;
-    this.host = host;
+    this.hostId = hostId;
     this.clock = clock;
     this.options = options;
     this.approvalTtlMs = options.approvalTtlMs ?? 5 * 60_000;
@@ -108,9 +109,9 @@ export class Pairing {
     return challenge;
   }
 
-  redeem(identity: AccessIdentity, body: RedeemBody, prove: ProofCheck): { ok: true; request: PairingRequest } | Failure {
+  redeem(identity: PeerIdentity, body: RedeemBody, prove: ProofCheck): { ok: true; request: PairingRequest } | Failure {
     const now = this.clock.now();
-    if (!this.perPrincipal.hit(identity.sub, now)) return { ok: false, code: 'RATE_LIMITED' };
+    if (!this.perPeer.hit(identity.peerId, now) || !this.overall.hit('all', now)) return { ok: false, code: 'RATE_LIMITED' };
     const challenge = this.challenges.get(body.challengeId);
     if (challenge === undefined || challenge.expiresAt <= now || challenge.used || challenge.failures >= MAX_CHALLENGE_FAILURES) {
       return { ok: false, code: 'CHALLENGE_INVALID' };
@@ -130,8 +131,7 @@ export class Pairing {
       pairingRequestId: randomId('pair'),
       challengeId: challenge.challengeId,
       ...(challenge.sessionId === undefined ? {} : { sessionId: challenge.sessionId }),
-      accessSub: identity.sub,
-      accessEmail: identity.email,
+      peerId: identity.peerId,
       deviceLabel: body.deviceLabel,
       platform: body.platform,
       hardwareBacked: body.hardwareBacked,
@@ -146,10 +146,10 @@ export class Pairing {
     return { ok: true, request };
   }
 
-  /** Status for the phone that redeemed; other principals see NOT_FOUND. */
-  status(pairingRequestId: string, identity: AccessIdentity, prove: ProofCheck): { ok: true; state: 'pending' | 'approved' | 'denied' | 'expired'; grant?: DeviceGrant } | Failure {
+  /** Status for the phone that redeemed; other peers see NOT_FOUND. */
+  status(pairingRequestId: string, identity: PeerIdentity, prove: ProofCheck): { ok: true; state: 'pending' | 'approved' | 'denied' | 'expired'; grant?: DeviceGrant } | Failure {
     const request = this.requests.get(pairingRequestId);
-    if (request === undefined || request.accessSub !== identity.sub) return { ok: false, code: 'NOT_FOUND' };
+    if (request === undefined || request.peerId !== identity.peerId) return { ok: false, code: 'NOT_FOUND' };
     const key = importP256PublicKey(request.publicKey)!;
     const proof = prove(key.key, request.fingerprint);
     if (!proof.ok) return proof;
@@ -166,7 +166,7 @@ export class Pairing {
     return this.requests.get(pairingRequestId);
   }
 
-  /** Local owner approval: mint the device grant and sign it with the host key. */
+  /** Local owner approval: mint the device grant. */
   async approve(pairingRequestId: string): Promise<DeviceRecord | undefined> {
     const request = this.requests.get(pairingRequestId);
     const now = this.clock.now();
@@ -178,8 +178,7 @@ export class Pairing {
       hardwareBacked: request.hardwareBacked,
       publicKey: request.publicKey,
       fingerprint: request.fingerprint,
-      accessSub: request.accessSub,
-      accessEmail: request.accessEmail,
+      peerId: request.peerId,
       scopes: [...SCOPES],
       createdAt: now,
       expiresAt: now + this.options.grantTtlMs,
@@ -188,21 +187,12 @@ export class Pairing {
     };
     request.state = 'approved';
     await this.state.addDevice(device);
-    const fields = {
-      hostId: this.state.hostId,
-      pairingRequestId: request.pairingRequestId,
+    request.grant = {
+      hostId: this.hostId,
       deviceId: device.deviceId,
       deviceKeyFingerprint: device.fingerprint,
       scopes: device.scopes,
       expiresAt: device.expiresAt,
-    };
-    request.grant = {
-      hostId: fields.hostId,
-      deviceId: fields.deviceId,
-      deviceKeyFingerprint: fields.deviceKeyFingerprint,
-      scopes: fields.scopes,
-      expiresAt: fields.expiresAt,
-      signature: this.host.signGrant(fields),
     };
     for (const listener of this.listeners) listener(request);
     return device;
