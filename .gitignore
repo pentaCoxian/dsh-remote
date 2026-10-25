@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+# isolated DSH homes used by spikes and integration tests
+.dsh-home/
+# rendered deployment files (templates stay tracked)
+deployment/out/
