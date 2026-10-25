@@ -36,8 +36,9 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:dsh": "pnpm --filter @dsh-remote/protocol build && pnpm build && vitest run --config vitest.integration.config.ts",
-    "dev:host": "node --conditions=source scripts/dev-host.ts"
+    "test:dsh": "pnpm --filter @dsh-remote/protocol build && pnpm build && vitest run --config vitest.integration.config.ts test/integration/dsh.itest.ts",
+    "dev:host": "node --conditions=source scripts/dev-host.ts",
+    "test:relay": "vitest run --config vitest.integration.config.ts test/integration/relay.itest.ts"
   },
   "dependencies": {
     "@dsh-remote/protocol": "workspace:*",

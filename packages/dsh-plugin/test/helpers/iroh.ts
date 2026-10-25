@@ -19,11 +19,11 @@ export interface IrohDialer {
   close(): Promise<void>;
 }
 
-export async function dialTicket(ticket: string, options: { secretKey?: number[] } = {}): Promise<IrohDialer> {
+export async function dialTicket(ticket: string, options: { secretKey?: number[]; relays?: string[] } = {}): Promise<IrohDialer> {
   const builder = EndpointClass.builder();
   builder.applyMinimal();
   // Default bind: a loopback-only socket could not reach a host's LAN addresses.
-  builder.relayMode(RelayMode.disabled());
+  builder.relayMode(options.relays === undefined ? RelayMode.disabled() : RelayMode.customFromUrls(options.relays));
   builder.secretKey(options.secretKey ?? SecretKey.generate().toBytes());
   const endpoint = await builder.bind();
   const connection = await endpoint.connect(EndpointTicket.fromString(ticket).endpointAddr(), Array.from(Buffer.from(ALPN, 'utf8')));
