@@ -1,0 +1,7 @@
+# State holds instance root passwords and IPs; it stays on this machine.
+*.tfstate
+*.tfstate.*
+.terraform/
+terraform.tfvars
+crash.log
+*.tfplan

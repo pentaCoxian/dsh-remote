@@ -1,0 +1,24 @@
+# iroh-relay ${hostname} (rendered by infra/; field reference: iroh-relay 1.4.1 src/main.rs)
+enable_relay = true
+http_bind_addr = "[::]:80"
+enable_quic_addr_discovery = true
+enable_metrics = true
+metrics_bind_addr = "127.0.0.1:9090"
+# Open relay at launch; rate limits below bound what any one client can push.
+access = "everyone"
+
+[tls]
+cert_mode = "LetsEncrypt"
+hostname = "${hostname}"
+cert_dir = "/var/lib/iroh-relay/certs"
+https_bind_addr = "[::]:443"
+quic_bind_addr = "[::]:7842"
+prod_tls = true
+
+[limits]
+accept_conn_limit = 20.0
+accept_conn_burst = 100
+
+[limits.client.rx]
+bytes_per_second = ${rx_bytes_per_second}
+max_burst_bytes = ${rx_bytes_per_second * 4}

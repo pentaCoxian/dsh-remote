@@ -1,0 +1,73 @@
+#cloud-config
+# DSH Remote relay ${hostname}: pinned iroh-relay ${version}, hardened systemd unit,
+# unattended security updates. Runs once at first boot.
+package_update: true
+package_upgrade: true
+packages:
+  - bind9-dnsutils
+  - unattended-upgrades
+
+write_files:
+  - path: /etc/iroh-relay/relay.toml
+    permissions: "0644"
+    content: |
+      ${indent(6, relay_toml)}
+  - path: /etc/systemd/system/iroh-relay.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=iroh relay for DSH Remote (${hostname})
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      ExecStart=/usr/local/bin/iroh-relay --config-path /etc/iroh-relay/relay.toml
+      DynamicUser=yes
+      StateDirectory=iroh-relay
+      WorkingDirectory=/var/lib/iroh-relay
+      Environment=RUST_LOG=info
+      Restart=always
+      RestartSec=5
+      AmbientCapabilities=CAP_NET_BIND_SERVICE
+      CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+      NoNewPrivileges=yes
+      ProtectSystem=strict
+      ProtectHome=yes
+      PrivateTmp=yes
+      PrivateDevices=yes
+      ProtectKernelTunables=yes
+      ProtectKernelModules=yes
+      ProtectControlGroups=yes
+      RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+      LimitNOFILE=1048576
+
+      [Install]
+      WantedBy=multi-user.target
+  - path: /usr/local/sbin/dshr-wait-dns
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+      # Hold the first start until ${hostname} resolves to this machine at the
+      # zone's own nameservers, so Let's Encrypt's first TLS-ALPN-01 lookup finds
+      # us. Gives up after 20 minutes; the relay's ACME client retries by itself.
+      me=$(ip -4 -o addr show scope global | awk '{print $4}' | cut -d/ -f1 | head -1)
+      ns=$(dig +short NS ${zone} | head -1)
+      for _ in $(seq 1 120); do
+        [ "$(dig +short @"$ns" ${hostname} A | head -1)" = "$me" ] && exit 0
+        sleep 10
+      done
+      echo "dshr-wait-dns: ${hostname} does not resolve to $me yet; starting anyway" >&2
+  - path: /etc/apt/apt.conf.d/20auto-upgrades
+    permissions: "0644"
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+
+runcmd:
+  - [sh, -c, 'if command -v ufw >/dev/null 2>&1; then ufw allow 80/tcp && ufw allow 443/tcp && ufw allow 7842/udp; fi']
+  - [sh, -c, 'curl -fsSL --retry 5 -o /tmp/iroh-relay.tgz https://github.com/n0-computer/iroh/releases/download/v${version}/iroh-relay-v${version}-x86_64-unknown-linux-musl.tar.gz']
+  - [sh, -c, 'echo "${sha256}  /tmp/iroh-relay.tgz" | sha256sum -c -']
+  - [sh, -c, 'tar -xzf /tmp/iroh-relay.tgz -C /usr/local/bin ./iroh-relay && chmod 0755 /usr/local/bin/iroh-relay && rm /tmp/iroh-relay.tgz']
+  - [/usr/local/sbin/dshr-wait-dns]
+  - [systemctl, daemon-reload]
+  - [systemctl, enable, --now, iroh-relay.service]
