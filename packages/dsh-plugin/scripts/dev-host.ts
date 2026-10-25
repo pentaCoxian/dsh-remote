@@ -3,7 +3,7 @@
 // it exactly as with a real host. Key and paired devices persist in --state
 // (default .dsh-home/dev-host) so a paired phone survives restarts.
 //
-//   node --conditions=source scripts/dev-host.ts [--relays n0|none] [--state <dir>]
+//   node --conditions=source scripts/dev-host.ts [--relays default|none|<url>,<url>] [--state <dir>]
 //   then: stdin commands `pair`, `y`/`n`, `ask`, `stream`, `local <session>`, `quit`
 //
 // `--relays none` serves direct addresses only (phone on the same LAN).
@@ -23,7 +23,8 @@ import { FakeAdapter } from '../src/testing/fake-adapter.ts';
 
 const args = process.argv.slice(2);
 const option = (name: string) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
-const relays = option('--relays') === 'none' ? [] : DEFAULT_RELAYS;
+const relayOption = option('--relays') ?? 'default';
+const relays = relayOption === 'none' ? [] : relayOption === 'default' ? DEFAULT_RELAYS : relayOption.split(',');
 const dir = resolve(option('--state') ?? join(import.meta.dirname, '../../../.dsh-home/dev-host'));
 ensurePrivateDir(dir);
 
