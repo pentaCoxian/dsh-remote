@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- cloudflared Named Tunnel for DSH Remote. Rendered by deployment/install.mjs. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>dev.dshremote.cloudflared</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>@CLOUDFLARED@</string>
+    <string>tunnel</string>
+    <string>--no-autoupdate</string>
+    <string>--config</string><string>@CLOUDFLARED_CONFIG@</string>
+    <string>run</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+  <key>ThrottleInterval</key><integer>5</integer>
+  <key>StandardOutPath</key><string>@LOG_DIR@/cloudflared.log</string>
+  <key>StandardErrorPath</key><string>@LOG_DIR@/cloudflared.log</string>
+</dict>
+</plist>

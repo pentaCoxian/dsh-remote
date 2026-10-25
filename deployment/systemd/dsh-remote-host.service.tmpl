@@ -1,0 +1,20 @@
+# DSH host with the DSH Remote plugin (user unit). Rendered by deployment/install.mjs.
+[Unit]
+Description=DeepSeek Harness host (dsh web, loopback) with DSH Remote
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=@WORKDIR@
+Environment="DSH_HOME=@DSH_HOME@"
+Environment="DSH_TELEMETRY_DISABLED=1"
+Environment="PATH=@NODE_BIN_DIR@:/usr/local/bin:/usr/bin:/bin"
+ExecStart="@NODE@" "@DSH_ENTRY@" web --host 127.0.0.1 --port @DSH_WEB_PORT@ --no-open
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

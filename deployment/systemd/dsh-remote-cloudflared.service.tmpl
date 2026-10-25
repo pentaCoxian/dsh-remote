@@ -1,0 +1,15 @@
+# cloudflared Named Tunnel for DSH Remote (user unit). Rendered by deployment/install.mjs.
+[Unit]
+Description=cloudflared tunnel for DSH Remote
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart="@CLOUDFLARED@" tunnel --no-autoupdate --config "@CLOUDFLARED_CONFIG@" run
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target
