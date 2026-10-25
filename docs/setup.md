@@ -28,7 +28,7 @@ The plugin works with no configuration. Optional settings go in
 - id: dsh-remote
   config:
     hostName: Home Lab             # shown on the phone; default: this machine's hostname
-    # relays: [https://…/]         # iroh relays; default: n0's public relays for now
+    # relays: [https://…/]         # iroh relays; default: DSH Remote's Tokyo relay, then n0's public relays
     # relays: []                   # direct and LAN connections only
     # grantTtlDays: 90
     # remoteApprovalTimeoutSec: 900

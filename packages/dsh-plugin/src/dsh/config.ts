@@ -9,8 +9,13 @@ export interface PluginConfig {
   readonly remoteApprovalTimeoutSec: number;
 }
 
-/** n0's public relays, until the DSH Remote relays are live. */
+/**
+ * The DSH Remote relay (Tokyo pilot, infra/), then n0's public relays as the
+ * fallback for hosts far from Tokyo and for a Tokyo outage. iroh homes each
+ * endpoint on the lowest-latency entry.
+ */
 export const DEFAULT_RELAYS: readonly string[] = [
+  'https://nrt1.relay.dshremote.pentacoxian.dev/',
   'https://aps1-1.relay.n0.iroh.link./',
   'https://euc1-1.relay.n0.iroh.link./',
   'https://use1-1.relay.n0.iroh.link./',
