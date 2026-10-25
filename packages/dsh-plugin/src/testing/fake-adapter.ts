@@ -32,6 +32,8 @@ export class FakeAdapter implements SessionAdapter {
   snapshotWindow = 50;
   /** Run a scripted turn (echo reply) right after each prompt. */
   autoReply = true;
+  /** Called for every accepted prompt when `autoReply` is off (the dev host scripts its own turns). */
+  onPrompt: ((deviceId: string, submission: PromptSubmission) => void) | undefined;
   /** Make the next prompt fail as `refused` or `uncertain` (`uncertain` still records it). */
   nextPromptFailure: 'refused' | 'uncertain' | undefined;
   /** Answer of the local DSH Web card; undefined keeps it pending until `settleLocal`. */
@@ -169,7 +171,10 @@ export class FakeAdapter implements SessionAdapter {
     const principal = { kind: 'dsh-remote-device', deviceId };
     this.append(submission.sessionId, 'agent/inbox/spliced', { target: 'next-turn', start: 0, inserted: [{ role: 'user', content: [{ type: 'text', text: submission.text }], source: { kind: 'user', rpcId: submission.requestId, principal } }] });
     if (failure === 'uncertain') throw new AdapterUncertainError('fake timeout');
-    if (!this.autoReply) return;
+    if (!this.autoReply) {
+      this.onPrompt?.(deviceId, submission);
+      return;
+    }
     queueMicrotask(() => {
       this.startTurn(submission.sessionId, submission.text, submission.requestId, principal);
       this.append(submission.sessionId, 'assistant/message', { turn: 1, step: 1, message: { role: 'assistant', content: [{ type: 'text', text: `Echo: ${submission.text}` }] } });
