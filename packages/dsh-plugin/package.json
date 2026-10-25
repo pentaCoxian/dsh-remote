@@ -1,0 +1,29 @@
+{
+  "name": "@dsh-remote/dsh-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "DSH Remote: continue a DeepSeek Harness session from a native phone app over Cloudflare Tunnel + Access",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@dsh-remote/protocol": "workspace:*",
+    "jose": "6.2.13",
+    "ws": "8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "@types/ws": "8.18.2",
+    "typescript": "5.9.3",
+    "vitest": "4.1.12"
+  }
+}

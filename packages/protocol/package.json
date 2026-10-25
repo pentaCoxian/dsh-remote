@@ -6,6 +6,7 @@
   "description": "DSH Remote wire contract: canonical request signing, cursors, errors, pairing and schema validators",
   "exports": {
     ".": {
+      "source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
