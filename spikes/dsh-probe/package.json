@@ -1,0 +1,9 @@
+{
+  "name": "@dsh-remote/spike-dsh-probe",
+  "private": true,
+  "type": "module",
+  "description": "Phase 0 throwaway: answers adapter questions A1-A9 against a pinned DSH",
+  "devDependencies": {
+    "@deepseek-ai/dsh": "0.2.1-rc.3"
+  }
+}

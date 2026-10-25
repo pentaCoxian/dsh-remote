@@ -1,0 +1,18 @@
+# Route the default model to spikes/dsh-probe/fake-llm.mjs (FAKE_LLM_KEY may hold any value).
+- id: llm-pi-ai
+  config:
+    providers:
+      fake:
+        displayName: DSH Remote fake model
+        apiKeyEnv: FAKE_LLM_KEY
+        api: openai-completions
+        baseURL: http://127.0.0.1:4398/v1
+        models:
+          - id: fake-model
+            name: Fake model
+            contextWindow: 128000
+            maxTokens: 4096
+- id: agent-default-model
+  config:
+    provider: fake
+    model: fake-model

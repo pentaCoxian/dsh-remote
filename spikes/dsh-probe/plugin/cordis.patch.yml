@@ -1,0 +1,5 @@
+- insert:
+    - id: dsh-remote-probe
+      name: dsh-remote-probe
+      config:
+        port: 4399

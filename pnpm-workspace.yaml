@@ -1,3 +1,11 @@
 packages:
   - packages/*
   - spikes/*
+
+# DSH host dependencies that need native build steps.
+allowBuilds:
+  '@deepseek-ai/dsh-subprocess-local': true
+  '@google/genai': true
+  koffi: true
+  node-pty: true
+  protobufjs: true
