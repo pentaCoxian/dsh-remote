@@ -10,7 +10,7 @@ its home relay's exact URL; relays are never put behind a load balancer.
 | Instance | `nrt1.relay.dshremote.pentacoxian.dev`, `vhp-1c-1gb-amd` (1 vCPU, 1 GB, NVMe, 2 TB), Debian 13, $6/mo |
 | Firewall | 80/tcp, 443/tcp, 7842/udp from anywhere; 22/tcp only from `admin_cidrs` |
 | DNS | A and AAAA, proxy off (the relay terminates its own TLS and takes UDP) |
-| TLS | Let's Encrypt via TLS-ALPN-01 on 443, no contact email |
+| TLS | Let's Encrypt via TLS-ALPN-01 on 443; ACME contact `acme_contact` (a role address) |
 
 ## Use
 

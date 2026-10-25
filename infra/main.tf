@@ -72,7 +72,7 @@ resource "vultr_instance" "relay" {
     zone        = var.zone
     version     = var.iroh_relay.version
     sha256      = var.iroh_relay.sha256
-    relay_toml  = templatefile("${path.module}/templates/relay.toml.tftpl", { hostname = each.value, rx_bytes_per_second = var.client_rx_bytes_per_second })
+    relay_toml  = templatefile("${path.module}/templates/relay.toml.tftpl", { hostname = each.value, contact = var.acme_contact, rx_bytes_per_second = var.client_rx_bytes_per_second })
   })
 
   # cloud-init runs once: a changed template only takes effect on a new instance.

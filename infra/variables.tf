@@ -40,6 +40,12 @@ variable "iroh_relay" {
   }
 }
 
+variable "acme_contact" {
+  description = "Contact address for the relays' Let's Encrypt account (iroh-relay requires one)."
+  type        = string
+  default     = "acme@pentacoxian.dev"
+}
+
 variable "client_rx_bytes_per_second" {
   description = "Per-client relay rate limit. DSH Remote traffic is text; this caps what an abusive client can push through an open relay."
   type        = number

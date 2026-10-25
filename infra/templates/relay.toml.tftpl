@@ -11,6 +11,8 @@ access = "everyone"
 cert_mode = "LetsEncrypt"
 hostname = "${hostname}"
 cert_dir = "/var/lib/iroh-relay/certs"
+# Required by iroh-relay in LetsEncrypt mode; stored with the ACME account only.
+contact = "${contact}"
 https_bind_addr = "[::]:443"
 quic_bind_addr = "[::]:7842"
 prod_tls = true
