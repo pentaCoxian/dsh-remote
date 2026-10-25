@@ -14,6 +14,15 @@ importers:
         specifier: 0.2.1-rc.3
         version: 0.2.1-rc.3(b3622d87111367378e3fda8e444c3d0b)
 
+  spikes/echo-origin:
+    dependencies:
+      jose:
+        specifier: 6.2.13
+        version: 6.2.13
+      ws:
+        specifier: 8.22.0
+        version: 8.22.0
+
 packages:
 
   '@agentclientprotocol/sdk@1.4.0':

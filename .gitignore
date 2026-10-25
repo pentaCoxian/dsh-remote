@@ -7,3 +7,8 @@ coverage/
 .dsh-home/
 # rendered deployment files (templates stay tracked)
 deployment/out/
+
+# per-deployment values for deployment/render.mjs
+deployment/site.env
+gate-probe.json
+gate-origin.jsonl

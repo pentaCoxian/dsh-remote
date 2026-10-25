@@ -1,0 +1,14 @@
+{
+  "name": "@dsh-remote/spike-echo-origin",
+  "private": true,
+  "type": "module",
+  "description": "Phase 0 throwaway: Cloudflare Access/Managed OAuth gate (C1-C8)",
+  "scripts": {
+    "origin": "node server.mjs",
+    "probe": "node oauth-probe.mjs"
+  },
+  "dependencies": {
+    "jose": "6.2.13",
+    "ws": "8.22.0"
+  }
+}

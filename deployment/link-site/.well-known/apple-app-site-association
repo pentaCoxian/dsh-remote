@@ -1,0 +1,16 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["@APPLE_TEAM_ID@.@IOS_BUNDLE_ID@"],
+        "components": [
+          { "/": "/oauth/callback", "comment": "Managed OAuth redirect" },
+          { "/": "/p", "comment": "pairing QR (fragment carries the payload)" }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["@APPLE_TEAM_ID@.@IOS_BUNDLE_ID@"]
+  }
+}

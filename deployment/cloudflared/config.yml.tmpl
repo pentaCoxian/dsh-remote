@@ -1,0 +1,17 @@
+# Named tunnel for DSH Remote. Rendered by `node deployment/render.mjs`.
+# Only the plugin's loopback API is routed; DSH Web (:3080) is never a route.
+tunnel: @TUNNEL_ID@
+credentials-file: @CREDENTIALS_FILE@
+metrics: 127.0.0.1:20241
+no-autoupdate: true
+
+ingress:
+  - hostname: @API_HOSTNAME@
+    service: http://127.0.0.1:4318
+    originRequest:
+      access:
+        required: true
+        teamName: @TEAM_NAME@
+        audTag:
+          - @AUD_TAG@
+  - service: http_status:404
