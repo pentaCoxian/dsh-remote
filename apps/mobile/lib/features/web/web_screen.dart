@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -10,6 +11,7 @@ import '../../core/errors.dart';
 import '../../state/link.dart';
 import '../../state/providers.dart';
 import '../../transport/iroh_pipe.dart';
+import '../../ui/widgets.dart';
 import '../../widgets/status.dart';
 
 /// DSH Web itself, full screen, through the host's end-to-end encrypted tunnel.
@@ -140,7 +142,7 @@ class _WebScreenState extends ConsumerState<WebScreen> {
     if (controller != null && await controller.canGoBack()) {
       await controller.goBack();
     } else if (mounted) {
-      context.pop();
+      leave(context);
     }
   }
 
@@ -155,28 +157,32 @@ class _WebScreenState extends ConsumerState<WebScreen> {
         if (!didPop) unawaited(_back());
       },
       child: Scaffold(
-        appBar: AppBar(
-          toolbarHeight: 44,
+        // A thin strip: DSH Web brings its own chrome.
+        appBar: shellBar(
+          context,
+          height: 46,
           title: Row(children: [
             LinkDot(link),
-            const SizedBox(width: 8),
-            Flexible(child: Text(host?.name ?? 'DSH', overflow: TextOverflow.ellipsis)),
+            const SizedBox(width: 10),
+            Flexible(child: Text(host?.name ?? 'DSH', overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600))),
           ]),
           actions: [
-            IconButton(tooltip: 'Reload', icon: const Icon(Icons.refresh), onPressed: controller == null ? _connect : () => controller.reload()),
-            IconButton(tooltip: 'Connection and host settings', icon: const Icon(Icons.settings_outlined), onPressed: () => context.push('/host/$_hostId/settings')),
+            IconButton(tooltip: 'Reload', icon: const Icon(LucideIcons.rotateCw, size: 18), onPressed: controller == null ? _connect : () => controller.reload()),
+            IconButton(tooltip: 'Connection and host settings', icon: const Icon(LucideIcons.settings2, size: 18), onPressed: () => context.push('/host/$_hostId/settings')),
           ],
         ),
         body: Column(children: [
-          if (_loading && _error == null) const LinearProgressIndicator(minHeight: 2),
+          SizedBox(height: 2, child: _loading && _error == null ? const LinearProgressIndicator(minHeight: 2) : null),
           if (_error != null)
-            MaterialBanner(
-              content: Text(_error!),
-              actions: [TextButton(onPressed: link == LinkState.revoked ? () => context.go('/') : _connect, child: Text(link == LinkState.revoked ? 'Back' : 'Try again'))],
+            Notice(
+              text: _error!,
+              danger: true,
+              action: link == LinkState.revoked ? 'Back' : 'Try again',
+              onAction: link == LinkState.revoked ? () => context.go('/') : _connect,
             ),
           Expanded(
             child: controller == null
-                ? Center(child: _error == null ? const Text('Opening DSH Web…') : const SizedBox.shrink())
+                ? Center(child: _error == null ? Text('Opening DSH Web…', style: Theme.of(context).textTheme.bodySmall) : const SizedBox.shrink())
                 : WebViewWidget(controller: controller),
           ),
         ]),

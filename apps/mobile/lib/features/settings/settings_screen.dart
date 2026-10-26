@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../core/protocol.dart';
 import '../../state/link.dart';
 import '../../state/providers.dart';
 import '../../transport/iroh_pipe.dart';
+import '../../ui/theme.dart';
+import '../../ui/widgets.dart';
 import '../../widgets/status.dart';
 
 /// Checks the host for real (redialing if the connection dropped) and keeps the
@@ -37,10 +40,10 @@ class SettingsScreen extends ConsumerWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Forget $name?'),
-        content: const Text('This phone deletes its key for this host. The host keeps listing the phone until you revoke it there (`dsh-remote revoke`).'),
+        content: const CodeText('This phone deletes its key for this host. The host keeps listing the phone until you revoke it there (`dsh-remote revoke`).'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Forget')),
+          TextButton(onPressed: () => Navigator.pop(context, true), style: TextButton.styleFrom(foregroundColor: Tokens.of(context).danger), child: const Text('Forget')),
         ],
       ),
     );
@@ -52,33 +55,30 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final host = ref.watch(hostsProvider).valueOrNull?.where((h) => h.hostId == hostId).firstOrNull;
-    if (host == null) return Scaffold(appBar: AppBar(), body: const Center(child: Text('This host is not paired.')));
+    if (host == null) return Scaffold(appBar: shellBar(context), body: const Center(child: Text('This host is not paired.')));
     final probe = ref.watch(_probeProvider(hostId));
-    final scheme = Theme.of(context).colorScheme;
-    final mono = Theme.of(context).textTheme.bodyMedium?.copyWith(fontFamily: 'monospace', color: scheme.onSurfaceVariant);
-    final refresh = IconButton(tooltip: 'Check again', icon: const Icon(Icons.refresh), onPressed: () => ref.invalidate(_probeProvider(hostId)));
+    final t = Tokens.of(context);
+    final refresh = IconButton(tooltip: 'Check again', icon: const Icon(LucideIcons.rotateCw, size: 18), onPressed: () => ref.invalidate(_probeProvider(hostId)));
 
     final Widget connection;
     if (host.revoked) {
-      connection = ListTile(leading: const _Icon(child: LinkDot(LinkState.revoked)), title: Text(describeLink(LinkState.revoked).label));
+      connection = InfoRow(icon: const Center(child: LinkDot(LinkState.revoked)), label: describeLink(LinkState.revoked).label);
     } else {
       connection = probe.when(
-        loading: () => const ListTile(leading: _Icon(child: SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))), title: Text('Checking the connection…')),
-        error: (error, _) => ListTile(
-          leading: const _Icon(child: LinkDot(LinkState.offline)),
-          title: Text(describeLink(LinkState.offline).label),
-          subtitle: Text(error is PipeException ? error.describe : '$error'),
+        loading: () => const InfoRow(icon: Center(child: SizedBox.square(dimension: 14, child: CircularProgressIndicator(strokeWidth: 2))), label: 'Checking the connection…'),
+        error: (error, _) => InfoRow(
+          icon: const Center(child: LinkDot(LinkState.offline)),
+          label: describeLink(LinkState.offline).label,
+          value: error is PipeException ? error.describe : '$error',
           trailing: refresh,
         ),
         data: (status) {
           final path = status.selected;
-          if (!status.connected || path == null) {
-            return ListTile(leading: const _Icon(child: LinkDot(LinkState.offline)), title: const Text('Not connected'), trailing: refresh);
-          }
-          return ListTile(
-            leading: const _Icon(child: LinkDot(LinkState.online)),
-            title: Text(path.relay ? 'Connected through a relay' : 'Connected directly'),
-            subtitle: Text('Round trip ${path.rttMs} ms'),
+          if (!status.connected || path == null) return InfoRow(icon: const Center(child: LinkDot(LinkState.offline)), label: 'Not connected', trailing: refresh);
+          return InfoRow(
+            icon: const Center(child: LinkDot(LinkState.online)),
+            label: path.relay ? 'Connected through a relay' : 'Connected directly',
+            value: 'Round trip ${path.rttMs} ms',
             trailing: refresh,
           );
         },
@@ -87,67 +87,60 @@ class SettingsScreen extends ConsumerWidget {
     final homeRelay = probe.valueOrNull?.homeRelay;
 
     return Scaffold(
-      appBar: AppBar(title: Text(host.name)),
-      body: ListView(children: [
-        const _Header('Connection'),
-        connection,
-        if (homeRelay != null) ListTile(leading: const _Icon(child: Icon(Icons.hub_outlined)), title: const Text('This phone’s relay'), subtitle: Text(Uri.parse(homeRelay).host)),
-        const ListTile(
-          leading: _Icon(child: Icon(Icons.lock_outline)),
-          title: Text('End-to-end encrypted'),
-          subtitle: Text('QUIC with TLS 1.3, authenticated by the host’s key. Relays forward encrypted packets only.'),
-        ),
-        const _Header('Host'),
-        ListTile(
-          leading: const _Icon(child: Icon(Icons.dns_outlined)),
-          title: const Text('Host id'),
-          subtitle: Text(_grouped(host.hostId), style: mono),
-          trailing: IconButton(tooltip: 'Copy the full host id', icon: const Icon(Icons.copy), onPressed: () => Clipboard.setData(ClipboardData(text: host.hostId))),
-        ),
-        ListTile(leading: const _Icon(child: Icon(Icons.schedule)), title: const Text('Paired'), subtitle: Text(relativeTime(host.pairedAt))),
-        const _Header('This phone'),
-        ListTile(leading: const _Icon(child: Icon(Icons.smartphone)), title: const Text('Device id'), subtitle: Text(host.deviceId, style: mono)),
-        ListTile(
-          leading: const _Icon(child: Icon(Icons.key_outlined)),
-          title: const Text('Request key'),
-          subtitle: Text.rich(TextSpan(children: [
-            TextSpan(text: shortFingerprint(spkiFingerprint(host.devicePublicKey)), style: mono),
-            TextSpan(text: host.hardwareBacked ? '\nStored in secure hardware' : '\nSoftware key'),
-          ])),
-          isThreeLine: true,
-        ),
-        const SizedBox(height: 24),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(foregroundColor: scheme.error, side: BorderSide(color: scheme.error)),
-            onPressed: () => _forget(context, ref, host.name),
-            icon: const Icon(Icons.link_off),
-            label: const Text('Forget this host'),
+      appBar: shellBar(context, title: Text(host.name)),
+      body: ListView(padding: const EdgeInsets.only(bottom: 32), children: [
+        const SectionLabel('Connection'),
+        Group(children: [
+          connection,
+          if (homeRelay != null) InfoRow(icon: const Icon(LucideIcons.radioTower), label: 'This phone’s relay', value: Uri.parse(homeRelay).host),
+          const InfoRow(icon: Icon(LucideIcons.shieldCheck), label: 'End-to-end encrypted', value: 'QUIC with TLS 1.3, authenticated by the host’s key. Relays forward encrypted packets only.'),
+        ]),
+        const SectionLabel('Host'),
+        Group(children: [
+          InfoRow(
+            icon: const Icon(LucideIcons.server),
+            label: 'Host id',
+            value: _grouped(host.hostId),
+            mono: true,
+            trailing: IconButton(
+              tooltip: 'Copy the full host id',
+              icon: const Icon(LucideIcons.copy, size: 18),
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: host.hostId));
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Host id copied')));
+              },
+            ),
           ),
-        ),
-        const SizedBox(height: 32),
+          InfoRow(icon: const Icon(LucideIcons.clock), label: 'Paired', value: relativeTime(host.pairedAt)),
+        ]),
+        const SectionLabel('This phone'),
+        Group(children: [
+          InfoRow(icon: const Icon(LucideIcons.smartphone), label: 'Device id', value: host.deviceId, mono: true),
+          InfoRow(
+            icon: const Icon(LucideIcons.keyRound),
+            label: 'Request key',
+            valueWidget: Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              Text(shortFingerprint(spkiFingerprint(host.devicePublicKey)), style: Theme.of(context).textTheme.bodySmall?.copyWith(fontFamily: 'monospace')),
+              Pill(host.hardwareBacked ? 'Secure hardware' : 'Software key'),
+            ]),
+          ),
+        ]),
+        const SizedBox(height: 28),
+        Group(children: [
+          InkWell(
+            onTap: () => _forget(context, ref, host.name),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Icon(LucideIcons.unlink, size: 16, color: t.danger),
+                const SizedBox(width: 8),
+                Text('Forget this host', style: TextStyle(color: t.danger, fontSize: 15, fontWeight: FontWeight.w500)),
+              ]),
+            ),
+          ),
+        ]),
       ]),
     );
   }
 }
 
-/// Leading slot of fixed width, so dots, spinners and icons line up in one column.
-class _Icon extends StatelessWidget {
-  const _Icon({required this.child});
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(width: 24, child: Center(child: child));
-}
-
-class _Header extends StatelessWidget {
-  const _Header(this.text);
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 24, 16, 4),
-        child: Text(text, style: Theme.of(context).textTheme.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
-      );
-}

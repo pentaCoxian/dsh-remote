@@ -1,25 +1,27 @@
 import 'package:flutter/material.dart';
 
 import '../state/link.dart';
+import '../ui/theme.dart';
 
-({String label, Color Function(ColorScheme) color}) describeLink(LinkState state) => switch (state) {
-      LinkState.online => (label: 'Connected', color: (c) => Colors.green.shade600),
-      LinkState.connecting => (label: 'Connecting…', color: (c) => c.outline),
-      LinkState.offline => (label: 'Home lab offline', color: (c) => c.error),
-      LinkState.revoked => (label: 'Access removed by the host', color: (c) => c.error),
-      LinkState.outdated => (label: 'Update DSH Remote', color: (c) => c.error),
+({String label, Color Function(Tokens) color}) describeLink(LinkState state) => switch (state) {
+      LinkState.online => (label: 'Connected', color: (t) => t.success),
+      LinkState.connecting => (label: 'Connecting…', color: (t) => t.textTertiary),
+      LinkState.offline => (label: 'Home lab offline', color: (t) => t.danger),
+      LinkState.revoked => (label: 'Access removed by the host', color: (t) => t.danger),
+      LinkState.outdated => (label: 'Update DSH Remote', color: (t) => t.danger),
     };
 
 class LinkDot extends StatelessWidget {
-  const LinkDot(this.state, {super.key});
+  const LinkDot(this.state, {super.key, this.size = 8});
   final LinkState state;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
     final info = describeLink(state);
     return Semantics(
       label: info.label,
-      child: Container(width: 10, height: 10, decoration: BoxDecoration(color: info.color(Theme.of(context).colorScheme), shape: BoxShape.circle)),
+      child: Container(width: size, height: size, decoration: BoxDecoration(color: info.color(Tokens.of(context)), shape: BoxShape.circle)),
     );
   }
 }

@@ -12,6 +12,7 @@ import 'features/pair/scan_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/web/web_screen.dart';
 import 'state/providers.dart';
+import 'ui/theme.dart';
 
 final _router = GoRouter(
   // A pairing code opened from outside the app (dshremote://pair?v=2&…) arrives
@@ -43,20 +44,14 @@ class DshRemoteApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    ThemeData theme(Brightness brightness) => ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF3D5AFE), brightness: brightness),
-          useMaterial3: true,
-          pageTransitionsTheme: const PageTransitionsTheme(builders: {
-            TargetPlatform.android: PredictiveBackPageTransitionsBuilder(),
-            TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-          }),
-        );
     return _Lifecycle(
       child: MaterialApp.router(
         title: 'DSH Remote',
-        theme: theme(Brightness.light),
-        darkTheme: theme(Brightness.dark),
+        theme: buildTheme(Brightness.light),
+        darkTheme: buildTheme(Brightness.dark),
+        debugShowCheckedModeBanner: false,
         routerConfig: _router,
+        builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(value: overlayStyle(Theme.of(context).brightness), child: child!),
       ),
     );
   }
@@ -104,6 +99,6 @@ class _InvalidCode extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('Connect host')),
-        body: const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('That is not a DSH Remote pairing code.', textAlign: TextAlign.center))),
+        body: Center(child: Padding(padding: const EdgeInsets.all(32), child: Text('That is not a DSH Remote pairing code.', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall))),
       );
 }
