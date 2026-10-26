@@ -43,20 +43,36 @@ const watchdog = setTimeout(() => {
 const profile = join(home, 'profiles', 'web');
 const dependencies = () => (JSON.parse(readFileSync(join(profile, 'package.json'), 'utf8')) as { dependencies: Record<string, string> }).dependencies;
 let runs = 0;
-const runInstaller = (what: string) => {
-  // Output to a file, not a pipe: spawnSync would otherwise wait for every process
-  // holding the pipe, so a stray pnpm child could outlive the timeout.
+/** This process's descendants of `pid`, as `ps` lists them: what a hung run is waiting on. */
+const tree = (pid: number) => {
+  const rows = spawnSync('ps', ['-A', '-o', 'pid=,ppid=,etime=,stat=,command='], { encoding: 'utf8' }).stdout.trim().split('\n').map((line) => line.trim().split(/\s+/));
+  const wanted = new Set([String(pid)]);
+  for (let size = 0; size !== wanted.size; ) {
+    size = wanted.size;
+    for (const [child, parent] of rows) if (wanted.has(parent!)) wanted.add(child!);
+  }
+  return rows.filter(([child]) => wanted.has(child!)).map((row) => row.join(' ').slice(0, 300)).join('\n');
+};
+const runInstaller = async (what: string) => {
+  // Output to a file, not a pipe: a stray child holding a pipe would outlive the run.
   const output = join(home, `install-${(runs += 1)}.log`);
   const fd = openSync(output, 'w');
-  const run = spawnSync(process.execPath, [installer, '--from', releaseDir], { env, stdio: ['ignore', fd, fd], timeout: 180_000, killSignal: 'SIGKILL' });
+  const child = spawn(process.execPath, [installer, '--from', releaseDir], { env, stdio: ['ignore', fd, fd] });
   closeSync(fd);
+  let hung = '';
+  const timer = setTimeout(() => {
+    hung = tree(child.pid!);
+    child.kill('SIGKILL');
+  }, 180_000);
+  const status = await new Promise<number | null>((done) => child.once('exit', (code) => done(code)));
+  clearTimeout(timer);
   const text = readFileSync(output, 'utf8');
-  check(run.status === 0, `${what}${run.error === undefined ? '' : ` (${run.error.message})`}`);
-  if (run.status !== 0) throw new Error(`install.mjs output:\n${text.slice(-4000)}`);
+  check(status === 0, `${what}${hung === '' ? '' : ' (still running after 3 minutes)'}`);
+  if (status !== 0) throw new Error(`install.mjs output:\n${text.slice(-4000)}${hung === '' ? '' : `\nprocesses at the time:\n${hung}`}`);
   return text;
 };
 
-runInstaller('install.mjs installs into a fresh DSH home');
+await runInstaller('install.mjs installs into a fresh DSH home');
 const local = dependencies();
 check(local['@dsh-remote/dsh-plugin']?.startsWith('file:') === true && local[MOBILE_UI.name]?.startsWith('file:') === true, 'both plugins come from checked local files');
 // What `dsh plugin add <URL>` left behind under the 0.1.0 instructions: pnpm refuses every later install.
@@ -64,9 +80,9 @@ const manifest = JSON.parse(readFileSync(join(profile, 'package.json'), 'utf8'))
 manifest.dependencies['@dsh-remote/dsh-plugin'] = 'https://github.com/pentaCoxian/dsh-remote/releases/download/v0.1.0/dsh-remote-dsh-plugin-0.1.0.tgz';
 manifest.dependencies[MOBILE_UI.name] = MOBILE_UI.tarball;
 writeFileSync(join(profile, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-const repair = runInstaller('install.mjs over a profile set up from URLs');
+const repair = await runInstaller('install.mjs over a profile set up from URLs');
 check(repair.includes('repaired the profile') && !Object.values(dependencies()).some((spec) => spec.startsWith('http')), 'the URL entries were replaced');
-runInstaller('install.mjs again (dsh-remote upgrade) over its own install');
+await runInstaller('install.mjs again (dsh-remote upgrade) over its own install');
 
 const port = await new Promise<number>((done) => {
   const server = createServer().listen(0, '127.0.0.1', () => {
