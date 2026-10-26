@@ -1,0 +1,87 @@
+{
+  "description": "Push envelopes: base64url(nonce[12] ‖ AES-256-GCM ciphertext ‖ tag[16]) with key, AAD \"dsh-remote/push/1\\n\" + hostId + \"\\n\" + handle. The plaintext is UTF-8 JSON padded with spaces to a multiple of 256 bytes; opened is the parsed message (title and body are already clipped by the sender). Every reject must fail to open.",
+  "key": "b6jNk2W5IxCHAolAvd94SnvZgjMjNLVFcsvgGpbFaf4",
+  "hostId": "2152f8d19b791d24453242e15f2eab6cb7cffa7b6a5ed30097960e069881db12",
+  "handle": "BinJAh_ul_LUSPJb_piMYg",
+  "valid": [
+    {
+      "envelope": "DCR-8-lD2VWNtIqSsGurY2VUp-AD2La1430ReiE0ufa9P77QJaPUDwQaRKbZuyMlOK6fK5riVJVzEijlExAvMtoUu-m7Tu9dG6PQrUKJafJL030RRjnwj3p9bTN7wn8ptsdZikIUK8-SvQ4Za9W-q3YCfg3K13LWV_-XeuKbzzPxe5wI3aSn2iqKB1HqholUxk6N45x4hb3Z59pk5b3vg-c-jSmWSBCwQ0j4Y1m069oFxY0r-729PL-C8fsd9uPWE67mkzHOQg2bfT70nHXn_2KBIMqJ_zmd_qf2UTn1tzXufR319WX6EwUtiG73zmPk3lfTYBoEkQobInnPPztQbqM7JO8h4FCPYNc0H4jx__v9i29tEva1e0hqq_v3JiBUb-4k1gIY2QjXYSjJs9fYkyh1xOBUM3REsIW5sOnfUtiSW2QB1WSRTY-VC5TTjfZ_TV_k-V3yAqRczx65legl_elcIeubU7pr3CcKBzi6kzK0LjcmbBqgEjpRfUnGtYNKncq8w1dsfIlIMoz6c-wTl38xZ3Zo1yE9sAhN7M4_pgeOd-If-vL8WcfUseje492sgUd_Bmk3SgVEBzjBIf8LeaJ9hcGWmF09TJtZXqPw9Yzk3MglycY6l8qIJKd9lOKs38YaaKiDuSs0Y11o58Zf7WgN7AEQFZLLe2D0gM_lPfrPVBC2le5VZ2vvtBs-B8MECcl6_isbuKScpzGj",
+      "opened": {
+        "v": 1,
+        "id": "n_approval1",
+        "kind": "approval",
+        "hostId": "2152f8d19b791d24453242e15f2eab6cb7cffa7b6a5ed30097960e069881db12",
+        "hostName": "Home Lab 研究室",
+        "sessionId": "session-8f21",
+        "title": "Fix the flaky upload test",
+        "body": "Approval needed: shell",
+        "ts": 1792900000000
+      }
+    },
+    {
+      "envelope": "aBcmlHkpY5wgLu6LS4dcitxbhlM9ZCuhB9kYJhNCkw53YVjIfhfF4OFrO9USLogowFBcymJIPveslHJrkzzdgCjcdQAZBdkFuCQmJVWNNArgFXrWr8KcZSqyIEJIioySasbi2i-h5ao2n8PqSeyz8y9z9ESDDtKr8m9JJ7YYj-9RYIVdMFPf4dLjhULPV_EU8Law6oCsbIMXLwqgW9MSl0KzCCyFY9mD0SpPhee2N3ZzaYLT0-0NdBpROfm8BVcbZtjqUByDiAvj0Ul-b9Eqi7X3gv0PqMIgMNZgDVBrCeVS8QveYvYfEUPRFiaR1_0y2NLOTmjEW1DRDxBwQoBukTtLueIj6keidYepqHodWzigOTj9zeBmO7yRXEyw65IAquQGpB8TXV7rVKLJM7b06o9miYzyHb9xOlL_wERCLFk9n3Io46P_YkrHBEPh1xJiX_B525mCz3sfWU122gyKePSN5yiA3S9qzQADKb-ApwSsO4OFXZg7woY-khB8hB0w4wZ8Sgz0lKzS00-93NWHXvKuCrLAF9augKxS1QOgeoJHVRABbO9FOq7URImajJiZWg0j3M3D-5lEwGlNYrevlXNk45Kfe_nnFCI-x2vhCKwrP4baTWrMZXqKuJytZ-BvquQHhGwlC3YyBMd0vThDWNnC_j_JoU61Ntj9XwWnxUIIJ3HrFBYKDEJH0FFoOeLT4gSyt-n94G96R0QEhIyczeYPiK_8xRXIUYHnHOCP5lSDNuESpGzbJzgXePtc1Gk5p0A0wEZibVq6aOFbZq4eN4yg_PREPLHTs8VjgzuEFtqwyZljah5dwaY93zhtrlxZOJoKt6_pqwOui_b4mZ7Os9HTnukQgKRfOmf2320Hk_8xrcUYw0GIGz4RXndOSNzeprPBrUVsIrBzsWCkzOEVb9WwMKN7zPXlw-00Lj27cVoPZ4qm6vjXipvv-GXIb49Lvj4oaZAnOlL4lwoQzcy1LAC-4WnHem5rCd1YDkA3XcLS6TX42N4xE2a6rp4C322ipNuHayJu8mrvid0k9C83TjKoFxNmM5V-aL8a_O66BUJm_HvsR1gXUr4aFbs1p-T41KlMKL_ljX1ZNeeIGJgUHdHxIFkkXckjt68sh_fnNx6LIZekuP8-WADHpzQTFuk4uE4YHNOTOFiQhbT_WTsEQrNeA7P6StgtUq1LydoZKXHQAhHNJDEcssEjbdlTQhzeKtTOPKYDRAq1H4EAM1OKdusy9N3HyVovgB659lH5yxVF4PhXrVzSWXKKNN8ur8RAEjofUontJXatizF-BIdS6ogSGU2t_vfX7HN-2357nnNuA9dZB-iFXY_3kfKyAGTdR2Q7Qtnm4u9y9kqwMkJyXTIvsYKJ2Od-26c1g5JcYBZcnP6taAaQ8B64hVoOVR_5aLSf08ReqZxAPF-kHt4Ifp4fnafnX3r3LOlC5l-plKriozgcgIbrMztfa0rElkO3LxmD4QCJGovhlQc4yFdThovM8m6wqrtNBGtm1ENpAyy-OnwBdbPReHQPiYEA4yxqrxFU2R-CuBC4rirgeRq-kWH4vDAjP-iTeFZQ7LHTyskQDpcH9AJzfC5fKGCwAaUEu8QfejIfrkGypmuHc049iRAjiKLqM4RbdN2DNlbLPCFuNaXxHFIWR2dUrAJTsYLXzyfWiIhGBlP2VXfiuvfx6Naf3sDKFiwJ8QKc8eiIop5jsvfSYwsmcXZzjZYSWJvawZP1jlDaC9qZxlQN",
+      "opened": {
+        "v": 1,
+        "id": "n_finished1",
+        "kind": "turn.finished",
+        "hostId": "2152f8d19b791d24453242e15f2eab6cb7cffa7b6a5ed30097960e069881db12",
+        "hostName": "Home Lab 研究室",
+        "sessionId": "session-8f21",
+        "title": "テストの失敗を確認",
+        "body": "Done 🚀 all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all green, all gree…",
+        "ts": 1792900000001
+      }
+    },
+    {
+      "envelope": "lIHXDFWqJYLlLLibqUbR8jb2GGOcF_8LY65lpx_WfLxmQtjqqQv9cBApNgj2e0dCOjWaysrlvq6_kMKiuLHhO5O-MSps7BQIiLcW5h2bAa-4dUHshtRo1zcXKu1Mdss5ZVIdqTogwqXXG2zm3BvdOLV2TtdonyGClAyulxBMOCN_cbNhEYOMBmTlpvx22oGOSE6mrzAmC276lJdF5egruufpuMkbVBpvWp3BahQPzy4ONhfUwlZvyLAOcSJZ_Cswydwj5sHqoejkNH-x4xwh1HvvCep0n1R_D6D6TkYnPbVit5EAEik2ZvDhPF0WSNwNiDOSmdFlJ0y5va43yuUAu4mVrcVJOyGGfw_zgKDQvhnOlalXPn0DBbkWcC0",
+      "opened": {
+        "v": 1,
+        "id": "n_test1",
+        "kind": "test",
+        "hostId": "2152f8d19b791d24453242e15f2eab6cb7cffa7b6a5ed30097960e069881db12",
+        "hostName": "Home Lab 研究室",
+        "title": "DSH Remote",
+        "body": "Notifications from this host work.",
+        "ts": 1792900000002
+      }
+    }
+  ],
+  "reject": [
+    {
+      "why": "other handle",
+      "hostId": "2152f8d19b791d24453242e15f2eab6cb7cffa7b6a5ed30097960e069881db12",
+      "handle": "BeLZhq_X9zOHLrSc1Ixupg",
+      "envelope": "DCR-8-lD2VWNtIqSsGurY2VUp-AD2La1430ReiE0ufa9P77QJaPUDwQaRKbZuyMlOK6fK5riVJVzEijlExAvMtoUu-m7Tu9dG6PQrUKJafJL030RRjnwj3p9bTN7wn8ptsdZikIUK8-SvQ4Za9W-q3YCfg3K13LWV_-XeuKbzzPxe5wI3aSn2iqKB1HqholUxk6N45x4hb3Z59pk5b3vg-c-jSmWSBCwQ0j4Y1m069oFxY0r-729PL-C8fsd9uPWE67mkzHOQg2bfT70nHXn_2KBIMqJ_zmd_qf2UTn1tzXufR319WX6EwUtiG73zmPk3lfTYBoEkQobInnPPztQbqM7JO8h4FCPYNc0H4jx__v9i29tEva1e0hqq_v3JiBUb-4k1gIY2QjXYSjJs9fYkyh1xOBUM3REsIW5sOnfUtiSW2QB1WSRTY-VC5TTjfZ_TV_k-V3yAqRczx65legl_elcIeubU7pr3CcKBzi6kzK0LjcmbBqgEjpRfUnGtYNKncq8w1dsfIlIMoz6c-wTl38xZ3Zo1yE9sAhN7M4_pgeOd-If-vL8WcfUseje492sgUd_Bmk3SgVEBzjBIf8LeaJ9hcGWmF09TJtZXqPw9Yzk3MglycY6l8qIJKd9lOKs38YaaKiDuSs0Y11o58Zf7WgN7AEQFZLLe2D0gM_lPfrPVBC2le5VZ2vvtBs-B8MECcl6_isbuKScpzGj"
+    },
+    {
+      "why": "other host",
+      "hostId": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "handle": "BinJAh_ul_LUSPJb_piMYg",
+      "envelope": "DCR-8-lD2VWNtIqSsGurY2VUp-AD2La1430ReiE0ufa9P77QJaPUDwQaRKbZuyMlOK6fK5riVJVzEijlExAvMtoUu-m7Tu9dG6PQrUKJafJL030RRjnwj3p9bTN7wn8ptsdZikIUK8-SvQ4Za9W-q3YCfg3K13LWV_-XeuKbzzPxe5wI3aSn2iqKB1HqholUxk6N45x4hb3Z59pk5b3vg-c-jSmWSBCwQ0j4Y1m069oFxY0r-729PL-C8fsd9uPWE67mkzHOQg2bfT70nHXn_2KBIMqJ_zmd_qf2UTn1tzXufR319WX6EwUtiG73zmPk3lfTYBoEkQobInnPPztQbqM7JO8h4FCPYNc0H4jx__v9i29tEva1e0hqq_v3JiBUb-4k1gIY2QjXYSjJs9fYkyh1xOBUM3REsIW5sOnfUtiSW2QB1WSRTY-VC5TTjfZ_TV_k-V3yAqRczx65legl_elcIeubU7pr3CcKBzi6kzK0LjcmbBqgEjpRfUnGtYNKncq8w1dsfIlIMoz6c-wTl38xZ3Zo1yE9sAhN7M4_pgeOd-If-vL8WcfUseje492sgUd_Bmk3SgVEBzjBIf8LeaJ9hcGWmF09TJtZXqPw9Yzk3MglycY6l8qIJKd9lOKs38YaaKiDuSs0Y11o58Zf7WgN7AEQFZLLe2D0gM_lPfrPVBC2le5VZ2vvtBs-B8MECcl6_isbuKScpzGj"
+    },
+    {
+      "why": "flipped nonce bit",
+      "hostId": "2152f8d19b791d24453242e15f2eab6cb7cffa7b6a5ed30097960e069881db12",
+      "handle": "BinJAh_ul_LUSPJb_piMYg",
+      "envelope": "DSR-8-lD2VWNtIqSsGurY2VUp-AD2La1430ReiE0ufa9P77QJaPUDwQaRKbZuyMlOK6fK5riVJVzEijlExAvMtoUu-m7Tu9dG6PQrUKJafJL030RRjnwj3p9bTN7wn8ptsdZikIUK8-SvQ4Za9W-q3YCfg3K13LWV_-XeuKbzzPxe5wI3aSn2iqKB1HqholUxk6N45x4hb3Z59pk5b3vg-c-jSmWSBCwQ0j4Y1m069oFxY0r-729PL-C8fsd9uPWE67mkzHOQg2bfT70nHXn_2KBIMqJ_zmd_qf2UTn1tzXufR319WX6EwUtiG73zmPk3lfTYBoEkQobInnPPztQbqM7JO8h4FCPYNc0H4jx__v9i29tEva1e0hqq_v3JiBUb-4k1gIY2QjXYSjJs9fYkyh1xOBUM3REsIW5sOnfUtiSW2QB1WSRTY-VC5TTjfZ_TV_k-V3yAqRczx65legl_elcIeubU7pr3CcKBzi6kzK0LjcmbBqgEjpRfUnGtYNKncq8w1dsfIlIMoz6c-wTl38xZ3Zo1yE9sAhN7M4_pgeOd-If-vL8WcfUseje492sgUd_Bmk3SgVEBzjBIf8LeaJ9hcGWmF09TJtZXqPw9Yzk3MglycY6l8qIJKd9lOKs38YaaKiDuSs0Y11o58Zf7WgN7AEQFZLLe2D0gM_lPfrPVBC2le5VZ2vvtBs-B8MECcl6_isbuKScpzGj"
+    },
+    {
+      "why": "flipped ciphertext bit",
+      "hostId": "2152f8d19b791d24453242e15f2eab6cb7cffa7b6a5ed30097960e069881db12",
+      "handle": "BinJAh_ul_LUSPJb_piMYg",
+      "envelope": "DCR-8-lD2VWNtIqSsGurY2VUp-AC2La1430ReiE0ufa9P77QJaPUDwQaRKbZuyMlOK6fK5riVJVzEijlExAvMtoUu-m7Tu9dG6PQrUKJafJL030RRjnwj3p9bTN7wn8ptsdZikIUK8-SvQ4Za9W-q3YCfg3K13LWV_-XeuKbzzPxe5wI3aSn2iqKB1HqholUxk6N45x4hb3Z59pk5b3vg-c-jSmWSBCwQ0j4Y1m069oFxY0r-729PL-C8fsd9uPWE67mkzHOQg2bfT70nHXn_2KBIMqJ_zmd_qf2UTn1tzXufR319WX6EwUtiG73zmPk3lfTYBoEkQobInnPPztQbqM7JO8h4FCPYNc0H4jx__v9i29tEva1e0hqq_v3JiBUb-4k1gIY2QjXYSjJs9fYkyh1xOBUM3REsIW5sOnfUtiSW2QB1WSRTY-VC5TTjfZ_TV_k-V3yAqRczx65legl_elcIeubU7pr3CcKBzi6kzK0LjcmbBqgEjpRfUnGtYNKncq8w1dsfIlIMoz6c-wTl38xZ3Zo1yE9sAhN7M4_pgeOd-If-vL8WcfUseje492sgUd_Bmk3SgVEBzjBIf8LeaJ9hcGWmF09TJtZXqPw9Yzk3MglycY6l8qIJKd9lOKs38YaaKiDuSs0Y11o58Zf7WgN7AEQFZLLe2D0gM_lPfrPVBC2le5VZ2vvtBs-B8MECcl6_isbuKScpzGj"
+    },
+    {
+      "why": "flipped tag bit",
+      "hostId": "2152f8d19b791d24453242e15f2eab6cb7cffa7b6a5ed30097960e069881db12",
+      "handle": "BinJAh_ul_LUSPJb_piMYg",
+      "envelope": "DCR-8-lD2VWNtIqSsGurY2VUp-AD2La1430ReiE0ufa9P77QJaPUDwQaRKbZuyMlOK6fK5riVJVzEijlExAvMtoUu-m7Tu9dG6PQrUKJafJL030RRjnwj3p9bTN7wn8ptsdZikIUK8-SvQ4Za9W-q3YCfg3K13LWV_-XeuKbzzPxe5wI3aSn2iqKB1HqholUxk6N45x4hb3Z59pk5b3vg-c-jSmWSBCwQ0j4Y1m069oFxY0r-729PL-C8fsd9uPWE67mkzHOQg2bfT70nHXn_2KBIMqJ_zmd_qf2UTn1tzXufR319WX6EwUtiG73zmPk3lfTYBoEkQobInnPPztQbqM7JO8h4FCPYNc0H4jx__v9i29tEva1e0hqq_v3JiBUb-4k1gIY2QjXYSjJs9fYkyh1xOBUM3REsIW5sOnfUtiSW2QB1WSRTY-VC5TTjfZ_TV_k-V3yAqRczx65legl_elcIeubU7pr3CcKBzi6kzK0LjcmbBqgEjpRfUnGtYNKncq8w1dsfIlIMoz6c-wTl38xZ3Zo1yE9sAhN7M4_pgeOd-If-vL8WcfUseje492sgUd_Bmk3SgVEBzjBIf8LeaJ9hcGWmF09TJtZXqPw9Yzk3MglycY6l8qIJKd9lOKs38YaaKiDuSs0Y11o58Zf7WgN7AEQFZLLe2D0gM_lPfrPVBC2le5VZ2vvtBs-B8MECcl6_isbuKScpzGi"
+    },
+    {
+      "why": "truncated",
+      "hostId": "2152f8d19b791d24453242e15f2eab6cb7cffa7b6a5ed30097960e069881db12",
+      "handle": "BinJAh_ul_LUSPJb_piMYg",
+      "envelope": "DCR-8-lD2VWNtIqSsGurY2VUp-AD2L"
+    }
+  ]
+}

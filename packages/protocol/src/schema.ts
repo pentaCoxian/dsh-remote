@@ -28,6 +28,12 @@ export type SchemaName =
   | 'DeviceGrant'
   | 'HostAddress'
   | 'WebSession'
+  | 'PushRegistrationRequest'
+  | 'PushStatus'
+  | 'PushMessage'
+  | 'GatewayHandleRequest'
+  | 'GatewayHandleResponse'
+  | 'GatewayPushRequest'
   | 'Lease'
   | 'ServerFrame';
 

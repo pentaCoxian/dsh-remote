@@ -25,6 +25,8 @@ export const ERRORS = {
   LEASE_HELD: { status: 409, retryable: false },
   LEASE_REQUIRED: { status: 409, retryable: false },
   TURN_NOT_ACTIVE: { status: 409, retryable: false },
+  /** Push gateway: the handle is unknown, or APNs/FCM dropped its device token. */
+  HANDLE_GONE: { status: 410, retryable: false },
   PAYLOAD_TOO_LARGE: { status: 413, retryable: false },
   UNSUPPORTED_MEDIA_TYPE: { status: 415, retryable: false },
   PROTOCOL_UNSUPPORTED: { status: 426, retryable: false },

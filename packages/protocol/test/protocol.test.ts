@@ -107,6 +107,23 @@ describe('schema: client bodies are closed', () => {
     expect(isValid('PairRedeemRequest', { ...body, deviceLabel: 'bad\nlabel' })).toBe(false);
     expect(isValid('PairRedeemRequest', { ...body, platform: 'windows' })).toBe(false);
   });
+
+  it('validates push registrations and gateway requests', () => {
+    const events = { approval: true, turnFinished: false, turnFailed: false };
+    const registration = { gateway: 'a'.repeat(64), handle: 'A'.repeat(22), key: 'B'.repeat(43), platform: 'fcm', events };
+    expect(isValid('PushRegistrationRequest', registration)).toBe(true);
+    expect(isValid('PushRegistrationRequest', { ...registration, key: 'B'.repeat(42) })).toBe(false);
+    expect(isValid('PushRegistrationRequest', { ...registration, events: { approval: true } })).toBe(false);
+    expect(isValid('PushRegistrationRequest', { ...registration, extra: 1 })).toBe(false);
+    const handle = { platform: 'apns', token: 'a1b2c3d4e5f6', apnsEnvironment: 'sandbox', host: 'a'.repeat(64) };
+    expect(isValid('GatewayHandleRequest', handle)).toBe(true);
+    expect(isValid('GatewayHandleRequest', { ...handle, token: 'has space' })).toBe(false);
+    expect(isValid('GatewayHandleRequest', { ...handle, apnsEnvironment: 'staging' })).toBe(false);
+    const push = { handle: 'A'.repeat(22), envelope: 'C'.repeat(400), urgency: 'high', collapseId: 'apr_1' };
+    expect(isValid('GatewayPushRequest', push)).toBe(true);
+    expect(isValid('GatewayPushRequest', { ...push, envelope: 'C'.repeat(3073) })).toBe(false);
+    expect(isValid('GatewayPushRequest', { ...push, urgency: 'urgent' })).toBe(false);
+  });
 });
 
 describe('schema: host frames are open', () => {

@@ -7,6 +7,7 @@ import { canonicalRequestString, sha256Hex } from '../src/signing.ts';
 import { encodeCursor } from '../src/cursor.ts';
 import { buildPairingUrl } from '../src/pairing.ts';
 import { spkiFingerprint } from '../src/keys.ts';
+import { openPush, sealPush, type PushMessage } from '../src/push.ts';
 
 const out = new URL('../../../protocol/vectors/', import.meta.url);
 
@@ -91,4 +92,39 @@ writeFileSync(new URL('pairing.json', out), `${JSON.stringify({
   ],
 }, null, 2)}\n`);
 
-console.log('wrote protocol/vectors/{signing,cursor,pairing}.json');
+const pushKey = randomBytes(32);
+const pushHostId = ticket.endpointId;
+const handle = randomBytes(16).toString('base64url');
+const pushMessages: PushMessage[] = [
+  { v: 1, id: 'n_approval1', kind: 'approval', hostId: pushHostId, hostName: 'Home Lab 研究室', sessionId: 'session-8f21', title: 'Fix the flaky upload test', body: 'Approval needed: shell', ts: 1_792_900_000_000 },
+  { v: 1, id: 'n_finished1', kind: 'turn.finished', hostId: pushHostId, hostName: 'Home Lab 研究室', sessionId: 'session-8f21', title: 'テストの失敗を確認', body: `Done 🚀 ${'all green, '.repeat(120)}`, ts: 1_792_900_000_001 },
+  { v: 1, id: 'n_test1', kind: 'test', hostId: pushHostId, hostName: 'Home Lab 研究室', title: 'DSH Remote', body: 'Notifications from this host work.', ts: 1_792_900_000_002 },
+];
+const pushCases = pushMessages.map((message) => {
+  const nonce = randomBytes(12);
+  const envelope = sealPush(pushKey, handle, message, nonce);
+  return { envelope, opened: openPush(pushKey, pushHostId, handle, envelope) };
+});
+const flip = (envelope: string, index: number) => {
+  const bytes = Buffer.from(envelope, 'base64url');
+  bytes[index] = bytes[index]! ^ 0x01;
+  return bytes.toString('base64url');
+};
+const first = pushCases[0]!.envelope;
+writeFileSync(new URL('push.json', out), `${JSON.stringify({
+  description: 'Push envelopes: base64url(nonce[12] ‖ AES-256-GCM ciphertext ‖ tag[16]) with key, AAD "dsh-remote/push/1\\n" + hostId + "\\n" + handle. The plaintext is UTF-8 JSON padded with spaces to a multiple of 256 bytes; opened is the parsed message (title and body are already clipped by the sender). Every reject must fail to open.',
+  key: pushKey.toString('base64url'),
+  hostId: pushHostId,
+  handle,
+  valid: pushCases,
+  reject: [
+    { why: 'other handle', hostId: pushHostId, handle: randomBytes(16).toString('base64url'), envelope: first },
+    { why: 'other host', hostId: 'f'.repeat(64), handle, envelope: first },
+    { why: 'flipped nonce bit', hostId: pushHostId, handle, envelope: flip(first, 0) },
+    { why: 'flipped ciphertext bit', hostId: pushHostId, handle, envelope: flip(first, 20) },
+    { why: 'flipped tag bit', hostId: pushHostId, handle, envelope: flip(first, Buffer.from(first, 'base64url').length - 1) },
+    { why: 'truncated', hostId: pushHostId, handle, envelope: first.slice(0, 30) },
+  ],
+}, null, 2)}\n`);
+
+console.log('wrote protocol/vectors/{signing,cursor,pairing,push}.json');

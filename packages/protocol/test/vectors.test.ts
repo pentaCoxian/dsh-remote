@@ -6,11 +6,16 @@ import {
   encodeCursor,
   ENDPOINT_ID,
   importP256PublicKey,
+  isValid,
+  openPush,
+  PUSH_LIMITS,
+  sealPush,
   parsePairingUrl,
   sha256Hex,
   TICKET,
   verifyP256Signature,
   type PairingPayload,
+  type PushMessage,
 } from '../src/index.ts';
 
 interface VectorKey {
@@ -24,6 +29,13 @@ interface SigningVector {
 interface CursorVector {
   valid: { sessionId: string; seq: number; cursor: string }[];
   invalid: string[];
+}
+interface PushVector {
+  key: string;
+  hostId: string;
+  handle: string;
+  valid: { envelope: string; opened: PushMessage }[];
+  reject: { why: string; hostId: string; handle: string; envelope: string }[];
 }
 interface PairingVector {
   ticket: { endpointId: string; full: string; bare: string };
@@ -106,4 +118,46 @@ describe('pairing vectors', () => {
       expect(parsePairingUrl(url)).toBeUndefined();
     });
   }
+});
+
+describe('push vectors', () => {
+  const { key, hostId, handle, valid, reject } = vector<PushVector>('push');
+  const keyBytes = Buffer.from(key, 'base64url');
+
+  for (const { envelope, opened } of valid) {
+    it(`opens ${opened.id}`, () => {
+      expect(openPush(keyBytes, hostId, handle, envelope)).toEqual(opened);
+      expect(isValid('PushMessage', opened)).toBe(true);
+      // nonce 12 + tag 16 around a whole number of 256-byte blocks
+      expect((Buffer.from(envelope, 'base64url').length - 28) % PUSH_LIMITS.padBytes).toBe(0);
+      expect(envelope.length).toBeLessThanOrEqual(PUSH_LIMITS.maxEnvelopeChars);
+    });
+  }
+
+  for (const { why, hostId: otherHost, handle: otherHandle, envelope } of reject) {
+    it(`refuses an envelope with ${why}`, () => {
+      expect(openPush(keyBytes, otherHost, otherHandle, envelope)).toBeUndefined();
+    });
+  }
+
+  it('reproduces an envelope from its nonce', () => {
+    const { envelope, opened } = valid[0]!;
+    const nonce = Buffer.from(envelope, 'base64url').subarray(0, 12);
+    expect(sealPush(keyBytes, handle, opened, nonce)).toBe(envelope);
+  });
+
+  it('clips long text so the envelope stays small', () => {
+    const opened = valid[1]!.opened;
+    expect(Buffer.byteLength(opened.body)).toBeLessThanOrEqual(PUSH_LIMITS.bodyBytes);
+    expect(opened.body.endsWith('…')).toBe(true);
+    const worst = { ...opened, id: 'n'.repeat(64), sessionId: 's'.repeat(200), hostName: '研'.repeat(500), title: '長'.repeat(1000), body: '🚀'.repeat(1000) };
+    const huge = sealPush(keyBytes, handle, worst);
+    expect(huge.length).toBeLessThanOrEqual(PUSH_LIMITS.maxEnvelopeChars);
+    const reopened = openPush(keyBytes, hostId, handle, huge)!;
+    expect(reopened.body).toBe(`${'🚀'.repeat(249)}…`);
+  });
+
+  it('refuses the wrong key', () => {
+    expect(openPush(Buffer.alloc(32, 7), hostId, handle, valid[0]!.envelope)).toBeUndefined();
+  });
 });

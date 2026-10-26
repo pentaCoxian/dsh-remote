@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://dsh-remote.invalid/protocol/native-v1.schema.json",
   "title": "DSH Remote native protocol v1",
-  "description": "Authoritative wire contract (protocol 1.2, carried over an iroh QUIC connection) between the DSH Remote plugin (host) and native clients. Client-to-host bodies are closed (additionalProperties false); host-to-client objects are open so clients ignore unknown fields and kinds.",
+  "description": "Authoritative wire contract (protocol 1.3, carried over an iroh QUIC connection) between the DSH Remote plugin (host) and native clients. Client-to-host bodies are closed (additionalProperties false); host-to-client objects are open so clients ignore unknown fields and kinds.",
   "$defs": {
     "sessionId": {
       "type": "string",
@@ -76,7 +76,8 @@
         "session:write",
         "approval:read",
         "approval:respond",
-        "web:open"
+        "web:open",
+        "push:register"
       ]
     },
     "PromptRequest": {
@@ -284,6 +285,7 @@
         "TURN_NOT_ACTIVE",
         "SESSION_NOT_PUBLISHED",
         "CHALLENGE_INVALID",
+        "HANDLE_GONE",
         "PAYLOAD_TOO_LARGE",
         "UNSUPPORTED_MEDIA_TYPE",
         "PROTOCOL_UNSUPPORTED",
@@ -735,6 +737,226 @@
         },
         "expiresAt": {
           "$ref": "#/$defs/timestampMs"
+        }
+      }
+    },
+    "pushHandle": {
+      "description": "Opaque push gateway handle for one (phone, host) pair: 128 random bits, base64url.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{22}$"
+    },
+    "pushKey": {
+      "description": "The phone's 32-byte AES-256-GCM key for this host's notifications, base64url.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "pushPlatform": {
+      "enum": [
+        "apns",
+        "fcm"
+      ]
+    },
+    "PushEvents": {
+      "description": "Which host events notify the phone.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approval",
+        "turnFinished",
+        "turnFailed"
+      ],
+      "properties": {
+        "approval": {
+          "type": "boolean"
+        },
+        "turnFinished": {
+          "type": "boolean"
+        },
+        "turnFailed": {
+          "type": "boolean"
+        }
+      }
+    },
+    "PushRegistrationRequest": {
+      "description": "PUT /v1/push: notify this device through `gateway` (the EndpointId of the host's push gateway) with this handle and key.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gateway",
+        "handle",
+        "key",
+        "platform",
+        "events"
+      ],
+      "properties": {
+        "gateway": {
+          "$ref": "#/$defs/hostId"
+        },
+        "handle": {
+          "$ref": "#/$defs/pushHandle"
+        },
+        "key": {
+          "$ref": "#/$defs/pushKey"
+        },
+        "platform": {
+          "$ref": "#/$defs/pushPlatform"
+        },
+        "events": {
+          "$ref": "#/$defs/PushEvents"
+        }
+      }
+    },
+    "PushStatus": {
+      "description": "GET/PUT /v1/push: the host's push gateway (null when push is off on the host) and this device's registration. Never carries the key.",
+      "type": "object",
+      "required": [
+        "v",
+        "gateway",
+        "registered",
+        "events"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "gateway": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/ticket"
+            }
+          ]
+        },
+        "registered": {
+          "type": "boolean"
+        },
+        "events": {
+          "$ref": "#/$defs/PushEvents"
+        }
+      }
+    },
+    "PushMessage": {
+      "description": "A notification as the phone reads it after opening the envelope (AES-256-GCM, AAD `dsh-remote/push/1\\n<hostId>\\n<handle>`).",
+      "type": "object",
+      "required": [
+        "v",
+        "id",
+        "kind",
+        "hostId",
+        "hostName",
+        "title",
+        "body",
+        "ts"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "kind": {
+          "type": "string"
+        },
+        "hostId": {
+          "$ref": "#/$defs/hostId"
+        },
+        "hostName": {
+          "type": "string"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/sessionId"
+        },
+        "title": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "ts": {
+          "$ref": "#/$defs/timestampMs"
+        }
+      }
+    },
+    "GatewayHandleRequest": {
+      "description": "Push gateway POST /v1/handles, from a phone: deliver pushes from `host` to this device token. Re-registering the same phone and host replaces the token and keeps the handle.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "platform",
+        "token",
+        "host"
+      ],
+      "properties": {
+        "platform": {
+          "$ref": "#/$defs/pushPlatform"
+        },
+        "token": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 4096,
+          "pattern": "^[A-Za-z0-9:_.-]+$"
+        },
+        "apnsEnvironment": {
+          "enum": [
+            "sandbox",
+            "production"
+          ]
+        },
+        "host": {
+          "$ref": "#/$defs/hostId"
+        }
+      }
+    },
+    "GatewayHandleResponse": {
+      "type": "object",
+      "required": [
+        "v",
+        "handle"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "handle": {
+          "$ref": "#/$defs/pushHandle"
+        }
+      }
+    },
+    "GatewayPushRequest": {
+      "description": "Push gateway POST /v1/push, from the host the handle is bound to. The envelope is opaque to the gateway.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "handle",
+        "envelope",
+        "urgency"
+      ],
+      "properties": {
+        "handle": {
+          "$ref": "#/$defs/pushHandle"
+        },
+        "envelope": {
+          "type": "string",
+          "minLength": 40,
+          "maxLength": 3072,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "urgency": {
+          "enum": [
+            "high",
+            "normal"
+          ]
+        },
+        "collapseId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
         }
       }
     },
