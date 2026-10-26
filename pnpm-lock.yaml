@@ -41,6 +41,9 @@ importers:
       '@types/ws':
         specifier: 8.18.2
         version: 8.18.2
+      rolldown:
+        specifier: 1.2.15
+        version: 1.2.15
       typescript:
         specifier: 5.9.3
         version: 5.9.3

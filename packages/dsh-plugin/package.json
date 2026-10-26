@@ -39,7 +39,9 @@
     "test:dsh": "pnpm --filter @dsh-remote/protocol --filter @dsh-remote/iroh-http build && pnpm build && vitest run --config vitest.integration.config.ts test/integration/dsh.itest.ts",
     "dev:host": "node --conditions=source scripts/dev-host.ts",
     "test:relay": "vitest run --config vitest.integration.config.ts test/integration/relay.itest.ts",
-    "dev:real-host": "node --conditions=source scripts/real-host.ts"
+    "dev:real-host": "node --conditions=source scripts/real-host.ts",
+    "pack:release": "node --conditions=source scripts/pack-release.ts",
+    "smoke:release": "node --conditions=source scripts/smoke-release.ts"
   },
   "dependencies": {
     "@dsh-remote/iroh-http": "workspace:*",
@@ -55,6 +57,7 @@
     "vitest": "4.1.12",
     "@types/qrcode": "1.5.6",
     "@deepseek-ai/dsh": "0.2.1-rc.3",
-    "@dsh-remote/push-gateway": "workspace:*"
+    "@dsh-remote/push-gateway": "workspace:*",
+    "rolldown": "1.2.15"
   }
 }

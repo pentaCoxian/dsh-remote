@@ -1,7 +1,8 @@
 #!/bin/sh
 # Deploy the push gateway to the relay box (pilot: nrt1). Confirm with the owner first.
 #
-#   infra/push/deploy.sh
+#   infra/push/deploy.sh                 # builds the release tarball here
+#   infra/push/deploy.sh <release .tgz>  # deploys one CI built (GitHub Release asset)
 #
 # Builds the gateway bundle, installs a pinned Node runtime (sha256-checked) and
 # the bundle with its one native dependency (npm ci against a lockfile), copies
@@ -30,18 +31,18 @@ fcm_account=$(resolve "$(setting FCM_SERVICE_ACCOUNT_FILE)")
 [ -z "$fcm_account" ] || [ -f "$fcm_account" ] || { echo "FCM_SERVICE_ACCOUNT_FILE in .env names a missing file" >&2; exit 1; }
 [ -z "$apns_key" ] || [ -n "$apns_key_id" ] || { echo "APNS_KEY_ID is not set in .env" >&2; exit 1; }
 
-echo "building the gateway bundle"
-(cd "$root" && pnpm --silent --filter @dsh-remote/push-gateway build)
+# The release artifact CI builds: pass its path to deploy that exact file, or build it here.
+artifact=${1:-}
+if [ -z "$artifact" ]; then
+  echo "building the gateway release"
+  (cd "$root" && pnpm --silent --filter @dsh-remote/push-gateway pack:release)
+  artifact=$(ls "$root"/packages/push-gateway/release/dsh-remote-push-gateway-*.tgz)
+fi
 release=$(git -C "$root" rev-parse --short HEAD)$(git -C "$root" diff --quiet HEAD -- packages || echo "-dirty")
-stage=$(mktemp -d)
-trap 'rm -rf "$stage"' EXIT
-cp "$root/packages/push-gateway/dist/gateway.mjs" "$stage/"
-printf '{\n  "name": "dshr-push",\n  "private": true,\n  "type": "module",\n  "dependencies": { "@number0/iroh": "1.2.0" }\n}\n' > "$stage/package.json"
-(cd "$stage" && npm install --package-lock-only --ignore-scripts --no-audit --no-fund --silent)
 
-echo "uploading release $release to $host"
+echo "uploading $(basename "$artifact") as release $release to $host"
 remote "mkdir -p /opt/dshr-push/releases/$release"
-COPYFILE_DISABLE=1 tar --no-xattrs -C "$stage" -cf - gateway.mjs package.json package-lock.json | remote "tar -C /opt/dshr-push/releases/$release -xf -"
+remote "tar -C /opt/dshr-push/releases/$release -xzf -" < "$artifact"
 
 echo "copying credentials (not printed)"
 remote "install -d -m 0700 /etc/dshr-push /etc/systemd/system/dshr-push.service.d"

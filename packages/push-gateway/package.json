@@ -18,7 +18,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "start": "node --conditions=source src/main.ts",
-    "dev:gateway": "node --conditions=source scripts/dev-gateway.ts"
+    "dev:gateway": "node --conditions=source scripts/dev-gateway.ts",
+    "pack:release": "node scripts/pack-release.ts"
   },
   "dependencies": {
     "@dsh-remote/iroh-http": "workspace:*",

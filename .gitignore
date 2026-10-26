@@ -18,3 +18,4 @@ gate-origin.jsonl
 
 # Push credentials (APNs .p8, FCM service account); paths go in .env.
 .secrets/
+release/

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { generateKeyPairSync } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
@@ -65,7 +66,7 @@ describe('keys', () => {
 
 describe('errors', () => {
   it('covers exactly the schema error codes', () => {
-    const schemaCodes = (schema.$defs.errorCode as { enum: string[] }).enum.sort();
+    const schemaCodes = [...(schema.$defs.errorCode as { enum: string[] }).enum].sort();
     expect(Object.keys(ERRORS).sort()).toEqual(schemaCodes);
   });
 
@@ -74,6 +75,12 @@ describe('errors', () => {
       expect(isValid('ErrorEnvelope', errorEnvelope(code, 'x', 'trace_1'))).toBe(true);
     }
     expect(errorEnvelope('TIMESTAMP_SKEW', 'clock', 'trace_1', { serverTime: 5 }).error).toMatchObject({ retryable: true, serverTime: 5 });
+  });
+});
+
+describe('schema', () => {
+  it('is compiled in from protocol/native-v1.schema.json (pnpm --filter @dsh-remote/protocol schema)', () => {
+    expect(schema).toEqual(JSON.parse(readFileSync(new URL('../../../protocol/native-v1.schema.json', import.meta.url), 'utf8')));
   });
 });
 

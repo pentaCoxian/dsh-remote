@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  node:
+    name: Plugin, gateway and protocol
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - name: Real DSH (dsh web 0.2.1-rc.3, scripted model)
+        run: pnpm --filter @dsh-remote/dsh-plugin test:dsh
+      - name: Release tarballs
+        run: |
+          pnpm --filter @dsh-remote/dsh-plugin pack:release
+          pnpm --filter @dsh-remote/push-gateway pack:release
+      - name: Install the plugin tarball into DSH and run it
+        run: pnpm --filter @dsh-remote/dsh-plugin smoke:release "$PWD/packages/dsh-plugin/release/dsh-remote-dsh-plugin-$(node -p "require('./packages/dsh-plugin/package.json').version").tgz"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-tarballs
+          path: |
+            packages/dsh-plugin/release/*.tgz
+            packages/push-gateway/release/*.tgz
+          retention-days: 14
+
+  native:
+    name: Rust pipe and Flutter app
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      # The interop and Dart end-to-end tests run the plugin's iroh fixture host.
+      - run: pnpm install --frozen-lockfile
+      - run: rustup toolchain install stable --profile minimal && rustup default stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/mobile/native/dshr_pipe
+      - name: Rust pipe tests, with the Node interop test
+        working-directory: apps/mobile/native/dshr_pipe
+        run: DSHR_INTEROP_NODE="$(which node)" cargo test
+      - name: Build the pipe library for the Dart end-to-end test
+        working-directory: apps/mobile/native/dshr_pipe
+        run: cargo build
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.29.2
+          channel: stable
+          cache: true
+      - working-directory: apps/mobile
+        run: flutter pub get && flutter analyze
+      - name: Flutter tests, with the pipe end to end over FFI
+        working-directory: apps/mobile
+        run: DSHR_PIPE_LIB="$PWD/native/dshr_pipe/target/debug/libdshr_pipe.so" DSHR_FIXTURE_NODE="$(which node)" flutter test

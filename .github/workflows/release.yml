@@ -1,0 +1,37 @@
+name: Release
+
+# Push a tag like v0.1.0 (matching the plugin's package.json version) to publish the
+# installable plugin and the push gateway as release assets, after the full CI passes.
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: ci
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: The tag names the plugin's version
+        run: |
+          version=$(node -p "require('./packages/dsh-plugin/package.json').version")
+          test "v$version" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME, but packages/dsh-plugin is $version"; exit 1; }
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-tarballs
+          path: dist
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" $(find dist -name '*.tgz') \
+            --title "DSH Remote $GITHUB_REF_NAME" \
+            --notes "Install the plugin next to dsh-mobile-maxxing (see docs/setup.md):
+          \`dsh plugin --profile web add ./dsh-remote-dsh-plugin-${GITHUB_REF_NAME#v}.tgz https://github.com/kuraneko1/dsh-mobile-maxxing/releases/download/v0.6.0/dsh-mobile-maxxing-0.6.0.tgz\`
+
+          dsh-remote-push-gateway-*.tgz is the push gateway, for infra/push/deploy.sh."

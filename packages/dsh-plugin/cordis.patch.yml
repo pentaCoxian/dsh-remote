@@ -1,7 +1,7 @@
 # Bundle patch applied by `dsh plugin --profile web add`. It works with no
 # config; optional settings in your profile's cordis.patch.yml (docs/setup.md):
 #   - id: dsh-remote
-#     config: { hostName, relays, grantTtlDays, remoteApprovalTimeoutSec }
+#     config: { hostName, relays, grantTtlDays, remoteApprovalTimeoutSec, pushGateway }
 - insert:
     - id: dsh-remote
       name: "@dsh-remote/dsh-plugin"

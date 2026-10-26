@@ -1,0 +1,1114 @@
+// GENERATED from protocol/native-v1.schema.json by scripts/gen-schema.ts; do not edit.
+// test/protocol.test.ts fails when the two differ.
+export const SCHEMA: { $id: string; $defs: Record<string, unknown>; [key: string]: unknown } = {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dsh-remote.invalid/protocol/native-v1.schema.json",
+  "title": "DSH Remote native protocol v1",
+  "description": "Authoritative wire contract (protocol 1.3, carried over an iroh QUIC connection) between the DSH Remote plugin (host) and native clients. Client-to-host bodies are closed (additionalProperties false); host-to-client objects are open so clients ignore unknown fields and kinds.",
+  "$defs": {
+    "sessionId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[\\x21-\\x7e]+$"
+    },
+    "workspaceId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[\\x21-\\x7e]+$"
+    },
+    "deviceId": {
+      "type": "string",
+      "pattern": "^dev_[A-Za-z0-9_-]{16,64}$"
+    },
+    "hostId": {
+      "description": "iroh EndpointId of the host: its Ed25519 public key, lowercase hex. QUIC authenticates it on every connection.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "ticket": {
+      "description": "iroh EndpointTicket (endpoint id plus relay and direct addresses).",
+      "type": "string",
+      "pattern": "^endpoint[a-z2-7]{52,1500}$"
+    },
+    "clientRequestId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{6,80}$"
+    },
+    "turnId": {
+      "type": "string",
+      "pattern": "^turn_[A-Za-z0-9_-]{6,96}$"
+    },
+    "approvalId": {
+      "type": "string",
+      "pattern": "^apr_[A-Za-z0-9_-]{6,96}$"
+    },
+    "challengeId": {
+      "type": "string",
+      "pattern": "^chl_[A-Za-z0-9_-]{22,64}$"
+    },
+    "pairingRequestId": {
+      "type": "string",
+      "pattern": "^pair_[A-Za-z0-9_-]{22,64}$"
+    },
+    "cursor": {
+      "type": "string",
+      "pattern": "^c1\\.[A-Za-z0-9_-]{4,600}$"
+    },
+    "spki": {
+      "description": "base64url DER SubjectPublicKeyInfo of a P-256 key",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{80,200}$"
+    },
+    "fingerprint": {
+      "description": "lowercase hex SHA-256 of the SPKI DER",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "timestampMs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "scope": {
+      "enum": [
+        "host:read",
+        "workspace:read",
+        "session:read",
+        "session:write",
+        "approval:read",
+        "approval:respond",
+        "web:open",
+        "push:register"
+      ]
+    },
+    "PromptRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "clientRequestId",
+        "text"
+      ],
+      "properties": {
+        "clientRequestId": {
+          "$ref": "#/$defs/clientRequestId"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16384
+        }
+      }
+    },
+    "CancelRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "turnId"
+      ],
+      "properties": {
+        "turnId": {
+          "$ref": "#/$defs/turnId"
+        }
+      }
+    },
+    "ApprovalResponseRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decision",
+        "expectedRevision"
+      ],
+      "properties": {
+        "decision": {
+          "enum": [
+            "allow_once",
+            "deny"
+          ]
+        },
+        "expectedRevision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "PairRedeemRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "challengeId",
+        "publicKey",
+        "deviceLabel",
+        "platform",
+        "hardwareBacked"
+      ],
+      "properties": {
+        "challengeId": {
+          "$ref": "#/$defs/challengeId"
+        },
+        "publicKey": {
+          "$ref": "#/$defs/spki"
+        },
+        "deviceLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[^\\x00-\\x1f\\x7f]+$"
+        },
+        "platform": {
+          "enum": [
+            "android",
+            "ios",
+            "other"
+          ]
+        },
+        "hardwareBacked": {
+          "type": "boolean"
+        }
+      }
+    },
+    "LeaseRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "takeover": {
+          "type": "boolean"
+        }
+      }
+    },
+    "ClientFrame": {
+      "description": "Text frames a client sends on /v1/events after the authenticated upgrade.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "sessionId"
+          ],
+          "properties": {
+            "op": {
+              "const": "subscribe"
+            },
+            "sessionId": {
+              "$ref": "#/$defs/sessionId"
+            },
+            "after": {
+              "$ref": "#/$defs/cursor"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "sessionId"
+          ],
+          "properties": {
+            "op": {
+              "const": "unsubscribe"
+            },
+            "sessionId": {
+              "$ref": "#/$defs/sessionId"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "op"
+          ],
+          "properties": {
+            "op": {
+              "const": "ping"
+            }
+          }
+        }
+      ]
+    },
+    "ErrorEnvelope": {
+      "type": "object",
+      "required": [
+        "v",
+        "error"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "error": {
+          "type": "object",
+          "required": [
+            "code",
+            "message",
+            "requestId",
+            "retryable"
+          ],
+          "properties": {
+            "code": {
+              "$ref": "#/$defs/errorCode"
+            },
+            "message": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "requestId": {
+              "type": "string"
+            },
+            "retryable": {
+              "type": "boolean"
+            },
+            "serverTime": {
+              "$ref": "#/$defs/timestampMs"
+            }
+          }
+        }
+      }
+    },
+    "errorCode": {
+      "enum": [
+        "BAD_REQUEST",
+        "UNAUTHENTICATED",
+        "ACCESS_DENIED",
+        "DEVICE_UNPAIRED",
+        "DEVICE_REVOKED",
+        "SIGNATURE_INVALID",
+        "TIMESTAMP_SKEW",
+        "NONCE_REPLAYED",
+        "SCOPE_DENIED",
+        "NOT_FOUND",
+        "METHOD_NOT_ALLOWED",
+        "IDEMPOTENCY_CONFLICT",
+        "APPROVAL_STALE",
+        "LEASE_HELD",
+        "LEASE_REQUIRED",
+        "TURN_NOT_ACTIVE",
+        "SESSION_NOT_PUBLISHED",
+        "CHALLENGE_INVALID",
+        "HANDLE_GONE",
+        "PAYLOAD_TOO_LARGE",
+        "UNSUPPORTED_MEDIA_TYPE",
+        "PROTOCOL_UNSUPPORTED",
+        "RATE_LIMITED",
+        "UNAVAILABLE",
+        "INTERNAL"
+      ]
+    },
+    "Meta": {
+      "type": "object",
+      "required": [
+        "v",
+        "hostId",
+        "hostName",
+        "protocol",
+        "capabilities",
+        "device",
+        "serverTime"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "hostId": {
+          "$ref": "#/$defs/hostId"
+        },
+        "hostName": {
+          "type": "string"
+        },
+        "protocol": {
+          "type": "object",
+          "required": [
+            "major",
+            "minor"
+          ],
+          "properties": {
+            "major": {
+              "const": 1
+            },
+            "minor": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "device": {
+          "type": "object",
+          "required": [
+            "deviceId",
+            "label",
+            "scopes",
+            "expiresAt"
+          ],
+          "properties": {
+            "deviceId": {
+              "$ref": "#/$defs/deviceId"
+            },
+            "label": {
+              "type": "string"
+            },
+            "scopes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/scope"
+              }
+            },
+            "expiresAt": {
+              "$ref": "#/$defs/timestampMs"
+            }
+          }
+        },
+        "serverTime": {
+          "$ref": "#/$defs/timestampMs"
+        }
+      }
+    },
+    "Workspace": {
+      "type": "object",
+      "required": [
+        "workspaceId",
+        "name"
+      ],
+      "properties": {
+        "workspaceId": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "SessionSummary": {
+      "type": "object",
+      "required": [
+        "sessionId",
+        "workspaceId",
+        "title",
+        "status",
+        "updatedAt",
+        "controller"
+      ],
+      "properties": {
+        "sessionId": {
+          "$ref": "#/$defs/sessionId"
+        },
+        "workspaceId": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "title": {
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "idle",
+            "running",
+            "needs_approval",
+            "unavailable"
+          ]
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/timestampMs"
+        },
+        "controller": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "required": [
+                "deviceId",
+                "label"
+              ],
+              "properties": {
+                "deviceId": {
+                  "$ref": "#/$defs/deviceId"
+                },
+                "label": {
+                  "type": "string"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "TimelineItem": {
+      "description": "One durable session event as the client renders it. Snapshots and session.event frames share this shape.",
+      "type": "object",
+      "required": [
+        "eventId",
+        "seq",
+        "kind",
+        "at",
+        "payload"
+      ],
+      "properties": {
+        "eventId": {
+          "type": "string"
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "kind": {
+          "$ref": "#/$defs/sessionEventKind"
+        },
+        "at": {
+          "$ref": "#/$defs/timestampMs"
+        },
+        "payload": {
+          "type": "object"
+        }
+      }
+    },
+    "sessionEventKind": {
+      "description": "Clients must ignore kinds they do not know.",
+      "type": "string",
+      "examples": [
+        "user.message",
+        "assistant.message",
+        "assistant.delta",
+        "tool.started",
+        "tool.finished",
+        "approval.requested",
+        "approval.resolved",
+        "turn.started",
+        "turn.finished",
+        "prompt.queued",
+        "session.status"
+      ]
+    },
+    "SessionSnapshot": {
+      "type": "object",
+      "required": [
+        "session",
+        "cursor",
+        "hasMore",
+        "items",
+        "pendingApprovals"
+      ],
+      "properties": {
+        "session": {
+          "$ref": "#/$defs/SessionSummary"
+        },
+        "cursor": {
+          "$ref": "#/$defs/cursor"
+        },
+        "hasMore": {
+          "type": "boolean"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TimelineItem"
+          }
+        },
+        "activeTurn": {
+          "type": "object",
+          "required": [
+            "turn"
+          ],
+          "properties": {
+            "turn": {
+              "type": "integer"
+            },
+            "turnId": {
+              "$ref": "#/$defs/turnId"
+            }
+          }
+        },
+        "pendingApprovals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Approval"
+          }
+        }
+      }
+    },
+    "PromptReceipt": {
+      "type": "object",
+      "required": [
+        "clientRequestId",
+        "turnId",
+        "state"
+      ],
+      "properties": {
+        "clientRequestId": {
+          "$ref": "#/$defs/clientRequestId"
+        },
+        "turnId": {
+          "$ref": "#/$defs/turnId"
+        },
+        "state": {
+          "description": "submitting: accepted by the host, not yet confirmed in the DSH log; failed: DSH never received it (resend explicitly with a new clientRequestId).",
+          "enum": [
+            "submitting",
+            "queued",
+            "started",
+            "finished",
+            "failed"
+          ]
+        }
+      }
+    },
+    "Approval": {
+      "type": "object",
+      "required": [
+        "approvalId",
+        "sessionId",
+        "revision",
+        "toolName",
+        "preview",
+        "requestedAt",
+        "state"
+      ],
+      "properties": {
+        "approvalId": {
+          "$ref": "#/$defs/approvalId"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/sessionId"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "toolName": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "preview": {
+          "type": "object",
+          "required": [
+            "text",
+            "truncated"
+          ],
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "truncated": {
+              "type": "boolean"
+            }
+          }
+        },
+        "requestedAt": {
+          "$ref": "#/$defs/timestampMs"
+        },
+        "state": {
+          "enum": [
+            "pending",
+            "allowed_once",
+            "denied",
+            "cancelled",
+            "unavailable"
+          ]
+        },
+        "resolvedBy": {
+          "type": "string"
+        }
+      }
+    },
+    "PairRedeemResponse": {
+      "type": "object",
+      "required": [
+        "pairingRequestId",
+        "expiresAt"
+      ],
+      "properties": {
+        "pairingRequestId": {
+          "$ref": "#/$defs/pairingRequestId"
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/timestampMs"
+        }
+      }
+    },
+    "PairStatusResponse": {
+      "type": "object",
+      "required": [
+        "state"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "pending",
+            "approved",
+            "denied",
+            "expired"
+          ]
+        },
+        "grant": {
+          "$ref": "#/$defs/DeviceGrant"
+        }
+      }
+    },
+    "DeviceGrant": {
+      "description": "Device grant. It is unsigned: it arrives over the QUIC connection that authenticated hostId.",
+      "type": "object",
+      "required": [
+        "hostId",
+        "deviceId",
+        "deviceKeyFingerprint",
+        "scopes",
+        "expiresAt"
+      ],
+      "properties": {
+        "hostId": {
+          "$ref": "#/$defs/hostId"
+        },
+        "deviceId": {
+          "$ref": "#/$defs/deviceId"
+        },
+        "deviceKeyFingerprint": {
+          "$ref": "#/$defs/fingerprint"
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/scope"
+          }
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/timestampMs"
+        }
+      }
+    },
+    "HostAddress": {
+      "description": "GET /v1/host/address: where the host can be reached now, so the phone can refresh the ticket it cached from the QR.",
+      "type": "object",
+      "required": [
+        "v",
+        "hostId",
+        "ticket",
+        "relayUrl",
+        "serverTime"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "hostId": {
+          "$ref": "#/$defs/hostId"
+        },
+        "ticket": {
+          "$ref": "#/$defs/ticket"
+        },
+        "relayUrl": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "maxLength": 512,
+              "pattern": "^https://"
+            }
+          ]
+        },
+        "serverTime": {
+          "$ref": "#/$defs/timestampMs"
+        }
+      }
+    },
+    "WebSession": {
+      "description": "POST /v1/web/session: opens this device's window for DSH Web over the dsh-remote/web/1 ALPN and returns DSH's launch-token query for the WebView's first load.",
+      "type": "object",
+      "required": [
+        "v",
+        "tokenQuery",
+        "expiresAt"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "tokenQuery": {
+          "type": "string",
+          "pattern": "^token=[A-Za-z0-9_-]{16,128}$"
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/timestampMs"
+        },
+        "mobileUi": {
+          "description": "Whether the host's DSH Web has its phone layout (dsh-mobile-maxxing), which DSH Remote requires; the app says so when it does not.",
+          "type": "object",
+          "required": [
+            "ok",
+            "version"
+          ],
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            },
+            "version": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "maxLength": 64
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "pushHandle": {
+      "description": "Opaque push gateway handle for one (phone, host) pair: 128 random bits, base64url.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{22}$"
+    },
+    "pushKey": {
+      "description": "The phone's 32-byte AES-256-GCM key for this host's notifications, base64url.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "pushPlatform": {
+      "enum": [
+        "apns",
+        "fcm"
+      ]
+    },
+    "PushEvents": {
+      "description": "Which host events notify the phone.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approval",
+        "turnFinished",
+        "turnFailed"
+      ],
+      "properties": {
+        "approval": {
+          "type": "boolean"
+        },
+        "turnFinished": {
+          "type": "boolean"
+        },
+        "turnFailed": {
+          "type": "boolean"
+        }
+      }
+    },
+    "PushRegistrationRequest": {
+      "description": "PUT /v1/push: notify this device through `gateway` (the EndpointId of the host's push gateway) with this handle and key.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gateway",
+        "handle",
+        "key",
+        "platform",
+        "events"
+      ],
+      "properties": {
+        "gateway": {
+          "$ref": "#/$defs/hostId"
+        },
+        "handle": {
+          "$ref": "#/$defs/pushHandle"
+        },
+        "key": {
+          "$ref": "#/$defs/pushKey"
+        },
+        "platform": {
+          "$ref": "#/$defs/pushPlatform"
+        },
+        "events": {
+          "$ref": "#/$defs/PushEvents"
+        }
+      }
+    },
+    "PushStatus": {
+      "description": "GET/PUT /v1/push: the host's push gateway (null when push is off on the host) and this device's registration. Never carries the key.",
+      "type": "object",
+      "required": [
+        "v",
+        "gateway",
+        "registered",
+        "events"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "gateway": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/ticket"
+            }
+          ]
+        },
+        "registered": {
+          "type": "boolean"
+        },
+        "events": {
+          "$ref": "#/$defs/PushEvents"
+        }
+      }
+    },
+    "PushMessage": {
+      "description": "A notification as the phone reads it after opening the envelope (AES-256-GCM, AAD `dsh-remote/push/1\\n<hostId>\\n<handle>`).",
+      "type": "object",
+      "required": [
+        "v",
+        "id",
+        "kind",
+        "hostId",
+        "hostName",
+        "title",
+        "body",
+        "ts"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "kind": {
+          "type": "string"
+        },
+        "hostId": {
+          "$ref": "#/$defs/hostId"
+        },
+        "hostName": {
+          "type": "string"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/sessionId"
+        },
+        "title": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "ts": {
+          "$ref": "#/$defs/timestampMs"
+        }
+      }
+    },
+    "GatewayHandleRequest": {
+      "description": "Push gateway POST /v1/handles, from a phone: deliver pushes from `host` to this device token. Re-registering the same phone and host replaces the token and keeps the handle.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "platform",
+        "token",
+        "host"
+      ],
+      "properties": {
+        "platform": {
+          "$ref": "#/$defs/pushPlatform"
+        },
+        "token": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 4096,
+          "pattern": "^[A-Za-z0-9:_.-]+$"
+        },
+        "apnsEnvironment": {
+          "enum": [
+            "sandbox",
+            "production"
+          ]
+        },
+        "host": {
+          "$ref": "#/$defs/hostId"
+        }
+      }
+    },
+    "GatewayHandleResponse": {
+      "type": "object",
+      "required": [
+        "v",
+        "handle"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "handle": {
+          "$ref": "#/$defs/pushHandle"
+        }
+      }
+    },
+    "GatewayPushRequest": {
+      "description": "Push gateway POST /v1/push, from the host the handle is bound to. The envelope is opaque to the gateway.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "handle",
+        "envelope",
+        "urgency"
+      ],
+      "properties": {
+        "handle": {
+          "$ref": "#/$defs/pushHandle"
+        },
+        "envelope": {
+          "type": "string",
+          "minLength": 40,
+          "maxLength": 3072,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "urgency": {
+          "enum": [
+            "high",
+            "normal"
+          ]
+        },
+        "collapseId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      }
+    },
+    "Lease": {
+      "type": "object",
+      "required": [
+        "sessionId",
+        "holder"
+      ],
+      "properties": {
+        "sessionId": {
+          "$ref": "#/$defs/sessionId"
+        },
+        "holder": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "required": [
+                "deviceId",
+                "label"
+              ],
+              "properties": {
+                "deviceId": {
+                  "$ref": "#/$defs/deviceId"
+                },
+                "label": {
+                  "type": "string"
+                }
+              }
+            }
+          ]
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/timestampMs"
+        }
+      }
+    },
+    "ServerFrame": {
+      "description": "Text frames the host sends on /v1/events.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "v",
+            "type",
+            "sessionId",
+            "eventId",
+            "kind",
+            "at",
+            "payload"
+          ],
+          "properties": {
+            "v": {
+              "const": 1
+            },
+            "type": {
+              "const": "session.event"
+            },
+            "sessionId": {
+              "$ref": "#/$defs/sessionId"
+            },
+            "eventId": {
+              "type": "string"
+            },
+            "seq": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "cursor": {
+              "$ref": "#/$defs/cursor"
+            },
+            "ephemeral": {
+              "const": true
+            },
+            "kind": {
+              "$ref": "#/$defs/sessionEventKind"
+            },
+            "at": {
+              "$ref": "#/$defs/timestampMs"
+            },
+            "payload": {
+              "type": "object"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "v",
+            "type",
+            "kind",
+            "payload"
+          ],
+          "properties": {
+            "v": {
+              "const": 1
+            },
+            "type": {
+              "const": "control"
+            },
+            "kind": {
+              "type": "string",
+              "examples": [
+                "hello",
+                "subscribed",
+                "heartbeat",
+                "resync.required",
+                "lease.changed",
+                "lease.lost",
+                "approvals.changed",
+                "host.status",
+                "error"
+              ]
+            },
+            "sessionId": {
+              "$ref": "#/$defs/sessionId"
+            },
+            "payload": {
+              "type": "object"
+            }
+          }
+        }
+      ]
+    }
+  }
+};

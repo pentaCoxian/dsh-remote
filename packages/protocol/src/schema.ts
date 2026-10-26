@@ -1,10 +1,8 @@
-import { readFileSync } from 'node:fs';
 import { Ajv2020, type ValidateFunction } from 'ajv/dist/2020.js';
+import { SCHEMA } from './schema-data.ts';
 
-/** The authoritative schema, read from `protocol/native-v1.schema.json` at the repo root. */
-export const schema: { $id: string; $defs: Record<string, unknown> } = JSON.parse(
-  readFileSync(new URL('../../../protocol/native-v1.schema.json', import.meta.url), 'utf8'),
-);
+/** The authoritative schema, `protocol/native-v1.schema.json` at the repo root, compiled in (scripts/gen-schema.ts). */
+export const schema: { $id: string; $defs: Record<string, unknown> } = SCHEMA;
 
 const ajv = new Ajv2020({ strict: true, strictTypes: false, allErrors: false });
 ajv.addSchema(schema);
