@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#101623</color>
+    <!-- Launch screen and Android 12+ splash: the icon's navy. -->
+    <color name="launch_background">#101623</color>
 </resources>
