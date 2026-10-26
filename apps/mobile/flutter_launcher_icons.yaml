@@ -1,0 +1,15 @@
+# App icons from one source image, assets/icon/icon.png (1254 px square, RGB without
+# alpha: App Store Connect refuses transparency).
+#
+# Android: `dart run flutter_launcher_icons` writes the launcher icons and an adaptive
+# icon (the artwork inset into the safe zone over its own navy).
+# iOS: one 1024 px icon, and Xcode renders every other size at build time:
+#   sips -z 1024 1024 assets/icon/icon.png --out ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-1024x1024@1x.png
+flutter_launcher_icons:
+  image_path: "assets/icon/icon.png"
+  ios: false
+  android: "ic_launcher"
+  min_sdk_android: 24
+  adaptive_icon_background: "#101623"
+  adaptive_icon_foreground: "assets/icon/icon.png"
+  adaptive_icon_foreground_inset: 16
