@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>aps-environment</key>
+	<string>development</string>
+	<!-- The app's own group stays first, so it remains the default for existing items
+	     (device keys, secure storage); the shared one holds push keys for the extension. -->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)dev.dshremote.dshRemote</string>
+		<string>$(AppIdentifierPrefix)dev.dshremote.shared</string>
+	</array>
+</dict>
+</plist>

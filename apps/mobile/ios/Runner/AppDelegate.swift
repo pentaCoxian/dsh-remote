@@ -1,10 +1,12 @@
 import Flutter
 import Security
 import UIKit
+import UserNotifications
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
   private let deviceKeys = DeviceKeys()
+  private let push = PushChannel()
 
   override func application(
     _ application: UIApplication,
@@ -14,7 +16,98 @@ import UIKit
     if let registrar = registrar(forPlugin: "DeviceKeys") {
       deviceKeys.register(with: registrar.messenger())
     }
+    if let registrar = registrar(forPlugin: "Push") {
+      push.register(with: registrar.messenger())
+    }
+    UNUserNotificationCenter.current().delegate = self
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  override func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+    push.tokenArrived(deviceToken)
+  }
+
+  override func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+    push.tokenFailed(error)
+  }
+
+  /// In the foreground too: a host only notifies while its DSH Web is not open here.
+  override func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+    completionHandler([.banner, .list, .sound])
+  }
+
+  /// A tap opens that host's DSH Web, through Flutter's deep linking (dshremote://host/<id>).
+  override func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+    if let host = response.notification.request.content.userInfo["dshr-host"] as? String, let url = URL(string: "dshremote://host/\(host)") {
+      _ = application(UIApplication.shared, open: url, options: [:])
+    }
+    completionHandler()
+  }
+}
+
+/// `dev.dshremote/push`: the APNs token, notification permission, and per-host
+/// keys (see lib/push/push_native.dart and Shared/PushKeyStore.swift).
+final class PushChannel {
+  private var waiting: [FlutterResult] = []
+
+  func register(with messenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(name: "dev.dshremote/push", binaryMessenger: messenger)
+    channel.setMethodCallHandler { [weak self] call, result in
+      guard let self else { return }
+      let args = call.arguments as? [String: Any] ?? [:]
+      switch call.method {
+      case "platform":
+        result("apns")
+      case "permitted":
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+          let allowed = [.authorized, .provisional, .ephemeral].contains(settings.authorizationStatus)
+          DispatchQueue.main.async { result(allowed) }
+        }
+      case "requestPermission":
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+          DispatchQueue.main.async { result(granted) }
+        }
+      case "token":
+        self.waiting.append(result)
+        UIApplication.shared.registerForRemoteNotifications()
+      case "newKey":
+        do {
+          result(try PushKeyStore.create(handle: args["handle"] as! String, hostId: args["hostId"] as! String))
+        } catch {
+          result(FlutterError(code: "push", message: error.localizedDescription, details: nil))
+        }
+      case "deleteKey":
+        PushKeyStore.delete(handle: args["handle"] as! String)
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+  }
+
+  /// Which APNs servers issued this build's token: development-signed builds (any
+  /// configuration installed from Xcode) say "development" in their embedded
+  /// profile; App Store and TestFlight builds carry none and use production.
+  private static let apnsEnvironment: String = {
+    #if targetEnvironment(simulator)
+      return "sandbox"
+    #else
+      guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
+        let data = try? Data(contentsOf: url), let profile = String(data: data, encoding: .isoLatin1)
+      else { return "production" }
+      return profile.range(of: "<key>aps-environment</key>\\s*<string>development</string>", options: .regularExpression) != nil ? "sandbox" : "production"
+    #endif
+  }()
+
+  func tokenArrived(_ token: Data) {
+    let reply: [String: Any] = ["token": token.map { String(format: "%02x", $0) }.joined(), "environment": PushChannel.apnsEnvironment]
+    for result in waiting { result(reply) }
+    waiting.removeAll()
+  }
+
+  func tokenFailed(_ error: Error) {
+    for result in waiting { result(FlutterError(code: "push", message: error.localizedDescription, details: nil)) }
+    waiting.removeAll()
   }
 }
 

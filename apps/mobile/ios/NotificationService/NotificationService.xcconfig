@@ -1,0 +1,2 @@
+// The extension's version follows the app's (FLUTTER_BUILD_NAME / FLUTTER_BUILD_NUMBER).
+#include "../Flutter/Generated.xcconfig"

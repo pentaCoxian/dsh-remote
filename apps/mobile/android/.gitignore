@@ -15,3 +15,4 @@ key.properties
 
 # Firebase project config for push (per developer; see app/build.gradle.kts).
 app/google-services.json
+/build/
