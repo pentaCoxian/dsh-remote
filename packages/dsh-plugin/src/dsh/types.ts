@@ -38,6 +38,12 @@ export type DshAssistantFrame =
   | { readonly type: 'chunk'; readonly attemptId: string; readonly index: number; readonly time: number; readonly chunk: unknown }
   | { readonly type: 'end'; readonly attemptId: string; readonly outcome: { readonly kind: 'committed' | 'abandoned' } };
 
+/** DSH Web's table of client modules (`@deepseek-ai/dsh-client-modules`). */
+export interface DshClientModules {
+  /** Where an installed plugin's DSH Web module is loaded from; undefined when it is not. */
+  clientPath(id: string): string | undefined;
+}
+
 /** The parts of a live DSH `Session` the plugin reads. */
 export interface DshSession {
   readonly id: string;
@@ -114,5 +120,7 @@ export interface DshContext {
   /** An agent failure outside a durable turn position (`@deepseek-ai/dsh-api-session-controller`). */
   on(event: 'api-session/error', listener: (sessionId: string, message: string) => void): () => void;
   effect(execute: () => (() => unknown) | Promise<() => unknown>, label?: string): unknown;
+  /** Run `callback` while the named services exist (cordis); it is undone when one goes away. */
+  inject(deps: readonly ['clientModules'], callback: (ctx: DshContext & { readonly clientModules: DshClientModules }) => void): unknown;
   readonly logger?: DshLogger;
 }

@@ -1,0 +1,21 @@
+{
+  "name": "dsh-mobile-maxxing",
+  "version": "0.6.0",
+  "private": true,
+  "type": "module",
+  "description": "TEST FIXTURE for pnpm test:dsh: stands in for github.com/kuraneko1/dsh-mobile-maxxing (same name, version and DSH manifest shape) and does nothing",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": []
+    }
+  }
+}

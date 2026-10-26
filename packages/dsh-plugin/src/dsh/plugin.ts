@@ -16,6 +16,8 @@ import { rcCommand, type RcRuntime } from './commands.ts';
 import type { PluginConfig } from './config.ts';
 import type { DshContext } from './types.ts';
 import type { WebGatewayOptions } from '../web/gateway.ts';
+import { MOBILE_UI, mobileUiStatus } from './mobile-ui.ts';
+import type { DshClientModules } from './types.ts';
 
 /**
  * DSH Web as the tunnel's target: its own loopback listener and its own owner
@@ -64,6 +66,16 @@ export function registerCommands(ctx: DshContext, runtime: RcRuntime): void {
  * rather than taking the plugin down, so the owner sees what to fix.
  */
 export function startRemote(ctx: DshContext, config: PluginConfig, runtime: RcRuntime, entry: 'production' | 'test-harness' = 'production', dir = stateDir()): void {
+  // DSH Web's client modules exist only where DSH Web does; read them while they do.
+  let clientModules: DshClientModules | undefined;
+  ctx.inject(['clientModules'], (web) => {
+    web.effect(() => {
+      clientModules = web.clientModules;
+      return () => (clientModules = undefined);
+    }, 'dsh-remote: phone layout check');
+  });
+  const mobileUi = () => mobileUiStatus(clientModules?.clientPath(MOBILE_UI.name));
+
   ctx.effect(async () => {
     let host: RemoteHost | undefined;
     let adapter: DshAdapter | undefined;
@@ -83,6 +95,7 @@ export function startRemote(ctx: DshContext, config: PluginConfig, runtime: RcRu
         web: dshWeb(ctx),
         push: { gateway: config.pushGateway },
         log: (line) => ctx.logger?.info(line),
+        mobileUi,
         hostName: config.hostName,
         grantTtlMs: config.grantTtlDays * 86_400_000,
         remoteApprovalTimeoutMs: config.remoteApprovalTimeoutSec * 1000,
@@ -102,6 +115,8 @@ export function startRemote(ctx: DshContext, config: PluginConfig, runtime: RcRu
       runtime.problems = [];
       const online = await started.endpoint!.online(10_000);
       const relay = started.endpoint!.homeRelay();
+      const layout = mobileUi();
+      if (!layout.ok) ctx.logger?.warn(`dsh-remote: ${layout.problem}`);
       ctx.logger?.info(`dsh-remote: host ${shortPeerId(started.hostId)} is ${relay !== null ? `reachable through ${relay}` : config.relays.length === 0 ? 'reachable on direct addresses only' : online ? 'online' : 'not yet connected to a relay'}`);
     } catch (error) {
       runtime.problems = [`could not start: ${error instanceof Error ? error.message : String(error)}`];

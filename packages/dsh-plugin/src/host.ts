@@ -25,6 +25,7 @@ import { Notifier } from './push/notifier.ts';
 import { PushSender, type GatewayLink } from './push/sender.ts';
 import { bareTicket, IrohTransport, ticketEndpointId, type TransportStatus } from './transport/iroh.ts';
 import { WebGateway, type WebGatewayOptions } from './web/gateway.ts';
+import type { MobileUiStatus } from './dsh/mobile-ui.ts';
 
 export interface RemoteHostOptions {
   /** The DSH binding, or a factory for one that needs the opened host state. */
@@ -43,6 +44,8 @@ export interface RemoteHostOptions {
   readonly push?: { readonly gateway: string | null };
   /** Operational messages for the owner (DSH's logger in production). */
   readonly log?: (line: string) => void;
+  /** Whether DSH Web has its phone layout (dsh-mobile-maxxing); absent in tests without DSH. */
+  readonly mobileUi?: () => MobileUiStatus;
   /** TESTS AND THE DEV HOST ONLY: also serve 127.0.0.1:`port`, taking each request's peer from `identify`. */
   readonly loopback?: { readonly port: number; identify(req: IncomingMessage): PeerIdentity | undefined };
   readonly hostName: string;
@@ -108,6 +111,8 @@ export interface HostStatus {
   readonly web: string | null;
   /** The push gateway's EndpointId (null when notifications are off) and how many devices it reaches. */
   readonly push: { readonly gateway: string | null; readonly devices: number };
+  /** DSH Web's phone layout (dsh-mobile-maxxing), or null when not checked. */
+  readonly mobileUi: MobileUiStatus | null;
   readonly published: string[];
   readonly devices: number;
   readonly pendingPairings: number;
@@ -170,7 +175,7 @@ export class RemoteHost {
       routes: [
         ...metaRoutes({ hostId, clock, hostName: options.hostName, capabilities: this.pushGateway === undefined ? CAPABILITIES : [...CAPABILITIES, 'push'], address: () => this.address() }),
         ...pairingRoutes({ pairing: this.pairing, proof }),
-        ...(this.web === undefined ? [] : webRoutes(this.web)),
+        ...(this.web === undefined ? [] : webRoutes(this.web, options.mobileUi)),
         ...(options.push === undefined ? [] : pushRoutes({ state, clock, hostId, hostName: options.hostName, gateway: this.pushGateway, sender: pushSender })),
         ...sessionRoutes({ adapter: this.adapter, state, events: this.events, receipts, leases: this.leases, approvals: this.approvals, clock }),
       ],
@@ -321,6 +326,7 @@ export class RemoteHost {
       transport: this.transport?.status() ?? null,
       loopbackPort: this.listeningPort ?? null,
       web: this.web === undefined ? null : (this.web.unavailable() ?? 'ready'),
+      mobileUi: this.options.mobileUi?.() ?? null,
       push: { gateway: this.pushGateway?.id ?? null, devices: this.state.devices().filter((d) => d.revokedAt === null && d.push !== undefined && d.push.gateway === this.pushGateway?.id).length },
       published: this.state.publications().map((p) => p.sessionId),
       devices: this.state.devices().filter((d) => d.revokedAt === null).length,

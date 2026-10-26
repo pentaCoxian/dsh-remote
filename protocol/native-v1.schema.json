@@ -737,6 +737,30 @@
         },
         "expiresAt": {
           "$ref": "#/$defs/timestampMs"
+        },
+        "mobileUi": {
+          "description": "Whether the host's DSH Web has its phone layout (dsh-mobile-maxxing), which DSH Remote requires; the app says so when it does not.",
+          "type": "object",
+          "required": [
+            "ok",
+            "version"
+          ],
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            },
+            "version": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "maxLength": 64
+                }
+              ]
+            }
+          }
         }
       }
     },

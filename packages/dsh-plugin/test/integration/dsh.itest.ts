@@ -68,7 +68,8 @@ beforeAll(async () => {
   fakeModel = spawn(process.execPath, [join(pluginDir, 'test/integration/fake-llm.mjs'), String(modelPort)], { stdio: 'ignore' });
 
   const env = { ...process.env, DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1', FAKE_LLM_KEY: 'itest' };
-  const add = spawnSync(process.execPath, [dshBin, 'plugin', '--profile', 'web', 'add', pluginDir], { env, encoding: 'utf8' });
+  // With a stand-in for dsh-mobile-maxxing, the phone layout DSH Remote requires next to it.
+  const add = spawnSync(process.execPath, [dshBin, 'plugin', '--profile', 'web', 'add', pluginDir, join(pluginDir, 'test/fixtures/fake-mobile-ui')], { env, encoding: 'utf8' });
   if (add.status !== 0) throw new Error(`dsh plugin add failed:\n${add.stdout}\n${add.stderr}`);
 
   gatewayStore = HandleStore.open(':memory:');
@@ -134,6 +135,8 @@ describe('DSH Remote inside dsh web 0.2.1-rc.3', () => {
     expect(status.entry).toBe('test-harness');
     expect(status.loopbackPort).toBeNull();
     expect(status.transport).toMatchObject({ relays: [], homeRelay: null });
+    // Found through DSH Web's own client-module table, as in production.
+    expect(status.mobileUi).toEqual({ version: '0.6.0', ok: true });
   });
 
   it('pairs a phone: QR ticket, iroh dial, redeem, local approval, grant', async () => {
@@ -198,6 +201,7 @@ describe('DSH Remote inside dsh web 0.2.1-rc.3', () => {
     const session = await signed({ method: 'POST', target: '/v1/web/session' });
     expect(session.status).toBe(200);
     expect(session.json.tokenQuery).toMatch(/^token=[A-Za-z0-9_-]+$/);
+    expect(session.json.mobileUi).toEqual({ ok: true, version: '0.6.0' });
     const status = await admin.call<HostStatus>({ method: 'status' });
     expect(status.web).toBe('ready');
 

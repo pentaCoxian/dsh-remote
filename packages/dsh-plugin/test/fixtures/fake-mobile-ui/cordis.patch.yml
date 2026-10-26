@@ -1,0 +1,5 @@
+# TEST FIXTURE: registers the stand-in like the real package does.
+- insert:
+    - id: dsh-mobile-maxxing
+      name: "dsh-mobile-maxxing"
+      config: {}

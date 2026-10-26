@@ -89,10 +89,16 @@ class HostApi {
     return (ticket: json['ticket'] as String, relayUrl: json['relayUrl'] as String?);
   }
 
-  /// Open this phone's DSH Web window (signed by the hardware key); returns DSH's launch-token query.
-  Future<({String tokenQuery, DateTime expiresAt})> webSession() async {
+  /// Open this phone's DSH Web window (signed by the hardware key); returns DSH's launch-token query,
+  /// and whether the host's DSH Web has its phone layout (dsh-mobile-maxxing; null from older hosts).
+  Future<({String tokenQuery, DateTime expiresAt, bool? phoneLayout})> webSession() async {
     final json = await request('POST', '/v1/web/session') as Json;
-    return (tokenQuery: json['tokenQuery'] as String, expiresAt: DateTime.fromMillisecondsSinceEpoch(json['expiresAt'] as int));
+    final layout = json['mobileUi'];
+    return (
+      tokenQuery: json['tokenQuery'] as String,
+      expiresAt: DateTime.fromMillisecondsSinceEpoch(json['expiresAt'] as int),
+      phoneLayout: layout is Map ? layout['ok'] == true : null,
+    );
   }
 
   // Notifications: the phone tells the host where and how to reach it.

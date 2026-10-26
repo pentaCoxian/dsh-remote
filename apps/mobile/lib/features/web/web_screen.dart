@@ -36,6 +36,9 @@ class _WebScreenState extends ConsumerState<WebScreen> {
   int? _port;
   String? _error;
   bool _loading = true;
+
+  /// The host's DSH Web lacks dsh-mobile-maxxing, and the user has not hidden the note.
+  bool _noPhoneLayout = false;
   bool _connecting = false;
 
   String get _hostId => widget.hostId;
@@ -76,6 +79,7 @@ class _WebScreenState extends ConsumerState<WebScreen> {
       final session = ref.read(hostSessionProvider(_hostId));
       if (session == null) throw const ApiException(status: 403, code: 'DEVICE_REVOKED', message: 'not paired');
       final web = await session.api.webSession();
+      if (mounted) setState(() => _noPhoneLayout = web.phoneLayout == false);
       final host = ref.read(hostsProvider).valueOrNull?.where((h) => h.hostId == _hostId).firstOrNull;
       final port = await ref.read(pipeManagerProvider).openWeb(_hostId, () => host?.ticket ?? session.host.ticket);
       if (!mounted) return;
@@ -176,6 +180,12 @@ class _WebScreenState extends ConsumerState<WebScreen> {
         ),
         body: Column(children: [
           SizedBox(height: 2, child: _loading && _error == null ? const LinearProgressIndicator(minHeight: 2) : null),
+          if (_noPhoneLayout && _error == null)
+            Notice(
+              text: 'DSH Web on this host has no phone layout. Install dsh-mobile-maxxing there; `dsh-remote doctor` shows how.',
+              action: 'Hide',
+              onAction: () => setState(() => _noPhoneLayout = false),
+            ),
           if (_error != null)
             Notice(
               text: _error!,

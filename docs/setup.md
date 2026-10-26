@@ -22,8 +22,19 @@ Pair only phones you control.
 ```sh
 pnpm install
 pnpm -r build
-dsh plugin --profile web add "$PWD/packages/dsh-plugin"
+dsh plugin --profile web add "$PWD/packages/dsh-plugin" \
+  https://github.com/kuraneko1/dsh-mobile-maxxing/releases/download/v0.6.0/dsh-mobile-maxxing-0.6.0.tgz
 ```
+
+Then restart DSH.
+
+DSH Remote requires [dsh-mobile-maxxing](https://github.com/kuraneko1/dsh-mobile-maxxing) (MIT),
+version 0.6.0 or later, which gives DSH Web its phone layout.
+- **Why a separate install:** DSH loads only the plugins its profile lists itself, so it is added
+  next to DSH Remote rather than coming as a dependency.
+- **If it is missing:** `/rc status`, `dsh-remote doctor` and the app all say so.
+- **Its own notifications:** its Web Push reaches browsers and installed PWAs. Inside the app's
+  WebView it stays quiet; the app gets DSH Remote's own end-to-end encrypted notifications.
 
 The plugin works with no configuration. Optional settings go in
 `$DSH_HOME/profiles/web/cordis.patch.yml` (default `~/.dsh`):
@@ -36,6 +47,7 @@ The plugin works with no configuration. Optional settings go in
     # relays: []                   # direct and LAN connections only
     # grantTtlDays: 90
     # remoteApprovalTimeoutSec: 900
+    # pushGateway: null            # turn notifications off; default: DSH Remote's gateway on the Tokyo relay
 ```
 
 - **Upgrading from the Cloudflare setup:** remove `publicHost`, `linkOrigin`, `access` and `port`.

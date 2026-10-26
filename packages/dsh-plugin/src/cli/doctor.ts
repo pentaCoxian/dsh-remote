@@ -67,6 +67,10 @@ export async function runDoctor(_args: string[]): Promise<number> {
     }
   }
 
+  if (status?.mobileUi != null) {
+    report(status.mobileUi.ok ? 'pass' : 'fail', status.mobileUi.ok ? `DSH Web has its phone layout (dsh-mobile-maxxing ${status.mobileUi.version})` : status.mobileUi.problem!);
+  }
+
   report(serviceEnabled() ? 'pass' : 'warn', serviceEnabled() ? 'DSH host service is installed' : 'no supervised DSH host service found (deployment/install.mjs)');
 
   const failures = results.filter((r) => r.level === 'fail').length;

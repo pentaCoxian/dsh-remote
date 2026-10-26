@@ -51,6 +51,7 @@ export function rcCommand(runtime: RcRuntime): (invocation: DshCommandInvocation
             `Published sessions: ${status.published.length}`,
             `Paired phones: ${devices.length}${devices.length === 0 ? '' : ` (${devices.map((d) => d.label).join(', ')})`}`,
             `Waiting for approval: ${status.pendingPairings}`,
+            ...(status.mobileUi === null ? [] : [`Phone layout: ${status.mobileUi.ok ? `dsh-mobile-maxxing ${status.mobileUi.version}` : `missing — ${status.mobileUi.problem}`}`]),
           ].join('\n'),
         };
       }

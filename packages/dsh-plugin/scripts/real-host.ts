@@ -9,6 +9,8 @@
 // request at once (never on a real host). --offers serves a fresh code at
 // http://127.0.0.1:PORT/offer, e.g. for `adb reverse` + `adb shell am start -d <code>`.
 // State persists in --home (default .dsh-home/real-host), so a paired phone stays paired.
+// dsh-mobile-maxxing (DSH Web's phone layout, which DSH Remote requires) is installed next to
+// the plugin; --no-mobile-ui leaves it out, to see what the app says without it.
 // Notifications go through the DSH Remote gateway on nrt1; --push-gateway TICKET picks another
 // (e.g. push-gateway's scripts/dev-gateway.ts), --push-gateway none turns them off.
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
@@ -20,6 +22,7 @@ import { dirname, join, resolve } from 'node:path';
 import QRCode from 'qrcode';
 import { AdminClient } from '../src/admin/socket.ts';
 import { DEFAULT_RELAYS } from '../src/dsh/config.ts';
+import { MOBILE_UI } from '../src/dsh/mobile-ui.ts';
 import type { PairingOffer, PendingPairing } from '../src/host.ts';
 
 const args = process.argv.slice(2);
@@ -57,7 +60,9 @@ const modelPort = await freePort();
 children.push(spawn(process.execPath, [join(pluginDir, 'test/integration/fake-llm.mjs'), String(modelPort)], { stdio: 'ignore' }));
 
 const env = { ...process.env, DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1', FAKE_LLM_KEY: 'dev' };
-const add = spawnSync(process.execPath, [dshBin, 'plugin', '--profile', 'web', 'add', pluginDir], { env, encoding: 'utf8' });
+const withMobileUi = !args.includes('--no-mobile-ui');
+const add = spawnSync(process.execPath, [dshBin, 'plugin', '--profile', 'web', 'add', pluginDir, ...(withMobileUi ? [MOBILE_UI.tarball] : [])], { env, encoding: 'utf8' });
+if (!withMobileUi) spawnSync(process.execPath, [dshBin, 'plugin', '--profile', 'web', 'remove', MOBILE_UI.name], { env, encoding: 'utf8' });
 if (add.status !== 0) throw new Error(`dsh plugin add failed:\n${add.stdout}\n${add.stderr}`);
 
 const overlay = join(home, 'real-host.patch.yml');

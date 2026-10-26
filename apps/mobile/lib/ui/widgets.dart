@@ -153,7 +153,7 @@ class Notice extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
       decoration: BoxDecoration(color: t.muted, borderRadius: BorderRadius.circular(Radii.control), border: Border.all(color: t.border)),
       child: Row(children: [
-        Expanded(child: Text(text, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: danger ? t.danger : t.textSecondary))),
+        Expanded(child: CodeText(text, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: danger ? t.danger : t.textSecondary))),
         if (action != null) TextButton(onPressed: onAction, child: Text(action!)),
       ]),
     );
