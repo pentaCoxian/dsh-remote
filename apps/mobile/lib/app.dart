@@ -14,6 +14,15 @@ import 'features/web/web_screen.dart';
 import 'state/providers.dart';
 
 final _router = GoRouter(
+  // A pairing code opened from outside the app (dshremote://pair?v=2&…) arrives
+  // as a deep link; route it to the pairing screen with the whole code.
+  redirect: (_, state) {
+    final uri = state.uri;
+    final external = uri.scheme == 'dshremote' || (uri.path == '/' && uri.queryParameters['v'] == '2' && uri.queryParameters.containsKey('t'));
+    if (!external) return null;
+    final code = Uri(scheme: 'dshremote', host: 'pair', queryParameters: uri.queryParameters).toString();
+    return Uri(path: '/pair', queryParameters: {'u': code}).toString();
+  },
   routes: [
     GoRoute(path: '/', builder: (_, __) => const HostsScreen()),
     GoRoute(path: '/scan', builder: (_, __) => const ScanScreen()),

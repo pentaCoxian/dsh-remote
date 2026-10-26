@@ -4,6 +4,10 @@ This is a one-time task on the machine that runs DSH. There is no domain, accoun
 open port to set up. The plugin reaches phones over an end-to-end encrypted iroh connection: QUIC
 with TLS 1.3, authenticated by the host's own key.
 
+The phone app shows **DSH Web itself**, carried through that connection. A paired phone has the
+same owner access as a browser on the host: every session, plugins, settings and automation.
+Pair only phones you control.
+
 ## 0. Prerequisites
 
 | Need | Check |
@@ -72,13 +76,14 @@ node packages/dsh-plugin/dist/cli/main.js doctor     # or put `dsh-remote` on PA
 
 Work in DSH Web at `http://127.0.0.1:3080`, opened on the host or through an SSH port forward.
 
-- **Hand a session to a phone:** run `/rc` in the session. Phones see only published sessions;
-  `/rc off` unpublishes it and local work continues.
 - **Pair a new phone:**
-  1. Run `dsh-remote pair --session <id>` in a terminal on the host.
-  2. Scan the QR from DSH Remote → Connect Host. The QR names this host's key, so the phone can
-     only ever connect to this host.
-  3. Compare the key fingerprints on both screens and approve with `y`.
+  1. Run `dsh-remote pair` in a terminal on the host.
+  2. Scan the QR with DSH Remote → Connect Host, or with the camera app, which opens DSH Remote.
+     The QR names this host's key, so the phone can only ever connect to this host.
+  3. Compare the key fingerprints on both screens and approve with `y`. Approving gives the phone
+     full DSH Web access.
+- **Use it:** tap the host in DSH Remote and DSH Web opens. Each opening is authorized by a request
+  signed with the phone's hardware key, and DSH logs the phone in with its own owner cookie.
 - **Manage phones:** `dsh-remote devices`, `dsh-remote revoke <deviceId>`, `/rc devices`,
   `/rc revoke <deviceId>`. Revoking closes the phone's connection.
 
@@ -97,4 +102,7 @@ Work in DSH Web at `http://127.0.0.1:3080`, opened on the host or through an SSH
 - **Sessions must belong to the supervised host.** DSH allows one writer per session, so a session
   opened by another `dsh` process cannot be controlled remotely.
 - **If DSH stops, the phone shows the host as offline.**
+- **DSH Web must listen on plain HTTP** (the default). An HTTPS-only DSH Web is not tunnelled.
+- **Notifications reach the phone only while DSH Web is on screen** until DSH Remote's own push
+  arrives (Web Push cannot run inside an app's WebView).
 - **The `/rc` QR card in DSH Web is not built yet.** Pair with `dsh-remote pair` in a terminal.

@@ -38,7 +38,8 @@
     "test": "vitest run",
     "test:dsh": "pnpm --filter @dsh-remote/protocol build && pnpm build && vitest run --config vitest.integration.config.ts test/integration/dsh.itest.ts",
     "dev:host": "node --conditions=source scripts/dev-host.ts",
-    "test:relay": "vitest run --config vitest.integration.config.ts test/integration/relay.itest.ts"
+    "test:relay": "vitest run --config vitest.integration.config.ts test/integration/relay.itest.ts",
+    "dev:real-host": "node --conditions=source scripts/real-host.ts"
   },
   "dependencies": {
     "@dsh-remote/protocol": "workspace:*",

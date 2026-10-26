@@ -4,6 +4,17 @@
 <dict>
 	<key>NSCameraUsageDescription</key>
 	<string>DSH Remote scans the pairing code your host shows.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>dev.dshremote.pair</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>dshremote</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<!-- DSH Web is served to the WebView on 127.0.0.1 by the iroh pipe (encrypted end to end inside QUIC). -->

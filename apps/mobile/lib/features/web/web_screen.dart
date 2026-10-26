@@ -88,6 +88,10 @@ class _WebScreenState extends ConsumerState<WebScreen> {
     } on PipeException catch (error) {
       _link(LinkState.offline);
       if (mounted) setState(() => _error = 'Cannot reach the home lab: ${error.message}');
+    } catch (error) {
+      // Never leave the screen spinning on an unexpected failure.
+      _link(LinkState.offline);
+      if (mounted) setState(() => _error = 'Could not open DSH Web: $error');
     } finally {
       _connecting = false;
     }

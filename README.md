@@ -1,11 +1,11 @@
 # DSH Remote
 
-Continue a DeepSeek Harness (DSH) session from a native Android/iOS app, from anywhere. The phone
-reaches the DSH host over an end-to-end encrypted iroh connection (QUIC, TLS 1.3, authenticated
-by the host's key). There is no domain, VPN, port forwarding or exposed DSH Web UI.
+Use your DeepSeek Harness (DSH) Web UI from your phone, from anywhere. The Android/iOS app carries
+DSH Web over an end-to-end encrypted iroh connection (QUIC, TLS 1.3, authenticated by the host's
+key), so there is no domain, VPN, port forwarding or publicly exposed DSH Web.
 
-Status: milestone 2. The plugin and protocol run on iroh (M1 done); next come the phone transport,
-the relays and encrypted push. The product contract is
+Status: the plugin, the Tokyo relay pilot and the phone app (DSH Web over the tunnel) work end to
+end, on a real Pixel and the iOS simulator. Next is end-to-end encrypted push. The product contract is
 [DSH_Remote_Native_Product_and_Implementation_Spec_v0.3.md](DSH_Remote_Native_Product_and_Implementation_Spec_v0.3.md);
 its Cloudflare transport sections are superseded by iroh. Deviations forced by upstream DSH are
 recorded in `docs/`.
@@ -16,8 +16,9 @@ recorded in `docs/`.
 | --- | --- |
 | `protocol/` | Wire schema and shared test vectors (Node + Dart) |
 | `packages/protocol/` | Canonical signing string, pairing QR v2, cursor codec, error and event types |
-| `packages/dsh-plugin/` | DSH plugin: `/rc`, iroh endpoint, pairing, device proofs, events, approvals; `dsh-remote` CLI |
-| `apps/mobile/` | Flutter app |
+| `packages/dsh-plugin/` | DSH plugin: iroh endpoint, pairing, device proofs, the DSH Web tunnel; `dsh-remote` CLI |
+| `apps/mobile/` | Flutter app: pairing, Rust iroh pipe (`native/`), DSH Web in a WebView |
+| `infra/` | OpenTofu for the iroh relays (Vultr + Cloudflare DNS) |
 | `deployment/` | systemd and launchd service templates and installer (plus Sprint 1 Cloudflare tooling, to be removed) |
 | `spikes/` | Throwaway Phase 0 probes |
 
