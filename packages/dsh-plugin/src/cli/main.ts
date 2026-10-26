@@ -80,7 +80,7 @@ async function upgrade(args: string[]): Promise<number> {
       ...(profile === undefined ? {} : { profile }),
       log: (line) => process.stdout.write(`${line}\n`),
     });
-    process.stdout.write(`\nDSH Remote ${result.version} is installed. Restart DSH (dsh web) to load it.\n`);
+    if (result.files.length > 0) process.stdout.write(`\nDSH Remote ${result.version} is installed. Restart DSH (dsh web) to load it.\n`);
     return 0;
   } catch (error) {
     process.stderr.write(`dsh-remote: ${error instanceof Error ? error.message : String(error)}\n`);

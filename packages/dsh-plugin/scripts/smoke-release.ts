@@ -1,8 +1,9 @@
 // Install a release the way users do and check the plugin really runs: a throwaway
 // DSH home, the release's install.mjs (with `dsh` on the PATH, dsh-mobile-maxxing
-// fetched and checked by the installer), the same again over a profile broken by
-// the 0.1.0 URL instructions, `dsh web`, then the plugin's admin socket, its CLI
-// and its DSH Web client module.
+// fetched and checked by the installer) putting in an older build and upgrading it
+// to this release, again with nothing to do, again over a profile broken by the 0.1.0
+// URL instructions, then `dsh web`, the plugin's admin socket, its CLI and its DSH
+// Web client module.
 //   node --conditions=source scripts/smoke-release.ts release/dsh-remote-dsh-plugin-<version>.tgz
 import { spawn, spawnSync } from 'node:child_process';
 import { chmodSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -53,11 +54,11 @@ const tree = (pid: number) => {
   }
   return rows.filter(([child]) => wanted.has(child!)).map((row) => row.join(' ').slice(0, 300)).join('\n');
 };
-const runInstaller = async (what: string) => {
+const runInstaller = async (what: string, from = releaseDir) => {
   // Output to a file, not a pipe: a stray child holding a pipe would outlive the run.
   const output = join(home, `install-${(runs += 1)}.log`);
   const fd = openSync(output, 'w');
-  const child = spawn(process.execPath, [installer, '--from', releaseDir], { env, stdio: ['ignore', fd, fd] });
+  const child = spawn(process.execPath, [installer, '--from', from], { env, stdio: ['ignore', fd, fd] });
   closeSync(fd);
   let hung = '';
   const timer = setTimeout(() => {
@@ -72,17 +73,30 @@ const runInstaller = async (what: string) => {
   return text;
 };
 
-await runInstaller('install.mjs installs into a fresh DSH home');
+const version = /dsh-remote-dsh-plugin-(.+)\.tgz$/.exec(tarball)![1]!;
+const installed = () => (JSON.parse(readFileSync(join(profile, 'node_modules', '@dsh-remote', 'dsh-plugin', 'package.json'), 'utf8')) as { version: string }).version;
+// The same plugin numbered 0.0.1, so the upgrade below is a real version bump.
+const older = join(home, 'older');
+mkdirSync(join(older, 'unpacked'), { recursive: true });
+spawnSync('tar', ['-xzf', tarball, '-C', join(older, 'unpacked')]);
+const olderManifest = join(older, 'unpacked', 'package', 'package.json');
+writeFileSync(olderManifest, JSON.stringify({ ...JSON.parse(readFileSync(olderManifest, 'utf8')), version: '0.0.1' }, null, 2));
+spawnSync('tar', ['-czf', join(older, 'dsh-remote-dsh-plugin-0.0.1.tgz'), '-C', join(older, 'unpacked'), 'package']);
+
+await runInstaller('install.mjs installs an older build into a fresh DSH home', older);
 const local = dependencies();
-check(local['@dsh-remote/dsh-plugin']?.startsWith('file:') === true && local[MOBILE_UI.name]?.startsWith('file:') === true, 'both plugins come from checked local files');
+check(local['@dsh-remote/dsh-plugin']?.startsWith('file:') === true && local[MOBILE_UI.name]?.startsWith('file:') === true && installed() === '0.0.1', 'both plugins come from checked local files');
+const upgrade = await runInstaller('install.mjs upgrades it to this release (dsh-remote upgrade)');
+check(installed() === version && !upgrade.includes(`${MOBILE_UI.name}-`), `the plugin is now ${installed()}, and dsh-mobile-maxxing was left alone`);
+const again = await runInstaller('install.mjs again, with nothing to upgrade');
+check(again.includes('already installed'), 'an up-to-date profile is left alone');
 // What `dsh plugin add <URL>` left behind under the 0.1.0 instructions: pnpm refuses every later install.
 const manifest = JSON.parse(readFileSync(join(profile, 'package.json'), 'utf8')) as { dependencies: Record<string, string> };
 manifest.dependencies['@dsh-remote/dsh-plugin'] = 'https://github.com/pentaCoxian/dsh-remote/releases/download/v0.1.0/dsh-remote-dsh-plugin-0.1.0.tgz';
 manifest.dependencies[MOBILE_UI.name] = MOBILE_UI.tarball;
 writeFileSync(join(profile, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 const repair = await runInstaller('install.mjs over a profile set up from URLs');
-check(repair.includes('repaired the profile') && !Object.values(dependencies()).some((spec) => spec.startsWith('http')), 'the URL entries were replaced');
-await runInstaller('install.mjs again (dsh-remote upgrade) over its own install');
+check(repair.includes('repaired the profile') && !Object.values(dependencies()).some((spec) => spec.startsWith('http')) && installed() === version, 'the URL entries were replaced');
 
 const port = await new Promise<number>((done) => {
   const server = createServer().listen(0, '127.0.0.1', () => {

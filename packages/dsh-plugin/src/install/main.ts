@@ -14,7 +14,7 @@ try {
     ...(option('--from') === undefined ? {} : { from: option('--from')! }),
     log: (line) => process.stdout.write(`dsh-remote: ${line}\n`),
   });
-  process.stdout.write(`\nDSH Remote ${result.version} is installed. Restart DSH (dsh web) to load it, then run /rc in DSH Web.\n`);
+  if (result.files.length > 0) process.stdout.write(`\nDSH Remote ${result.version} is installed. Restart DSH (dsh web) to load it, then run /rc in DSH Web.\n`);
 } catch (error) {
   process.stderr.write(`dsh-remote: ${error instanceof Error ? error.message : String(error)}\n`);
   process.exitCode = 1;

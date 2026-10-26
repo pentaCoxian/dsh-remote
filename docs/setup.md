@@ -32,7 +32,8 @@ curl -fsSL https://github.com/pentaCoxian/dsh-remote/releases/latest/download/in
 - **Why not `dsh plugin add <URL>`:** DSH's pnpm records no integrity for a tarball added by URL and
   then refuses every later install in that profile (`ERR_PNPM_MISSING_TARBALL_INTEGRITY`). The
   0.1.0 instructions did that; the installer repairs such a profile before adding the files.
-- **Upgrade later:** `dsh-remote upgrade [version]` does the same, or rerun the line above.
+- **Upgrade later:** `dsh-remote upgrade [version]` does the same, or rerun the line above. It hands DSH
+  only what changes: nothing when the profile is up to date, and a newer dsh-mobile-maxxing is kept.
 
 Or from source:
 

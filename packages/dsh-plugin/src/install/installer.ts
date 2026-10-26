@@ -35,6 +35,7 @@ export interface InstallOptions {
 
 export interface InstallResult {
   readonly version: string;
+  /** The tarballs handed to DSH; empty when the profile already had these versions. */
   readonly files: readonly string[];
   readonly repaired: readonly string[];
 }
@@ -51,17 +52,40 @@ export async function install(options: InstallOptions = {}): Promise<InstallResu
   mkdirSync(dir, { recursive: true, mode: 0o700 });
 
   const plugin = options.from === undefined ? await downloadRelease(options.version, dir, log) : copyLocalRelease(options.from, options.version, dir);
-  const mobileUi = await mobileUiTarball(dir, options.from, log);
-  const repaired = repairProfile(join(home, 'profiles', profile), log);
+  const profileDir = join(home, 'profiles', profile);
+  const repaired = repairProfile(profileDir, log);
+
+  // Only what changes goes to DSH: pnpm re-adding a tarball of the version already
+  // installed can stall after it finishes, and a newer dsh-mobile-maxxing is kept.
+  const files: string[] = [];
+  if (installedVersion(profileDir, PLUGIN) !== plugin.version) files.push(plugin.file);
+  const mobileUi = installedVersion(profileDir, MOBILE_UI.name);
+  if (mobileUi === undefined || compareVersions(mobileUi, MOBILE_UI.minVersion) < 0) files.push(await mobileUiTarball(dir, options.from, log));
+  if (files.length === 0) {
+    log(`DSH Remote ${plugin.version} and ${MOBILE_UI.name} ${mobileUi} are already installed in the ${profile} profile`);
+    return { version: plugin.version, files, repaired };
+  }
 
   const [command = 'dsh', ...prefix] = options.dsh ?? ['dsh'];
-  log(`adding DSH Remote ${plugin.version} and ${MOBILE_UI.name} to the ${profile} profile`);
+  log(`adding ${files.map((file) => basename(file, '.tgz')).join(' and ')} to the ${profile} profile`);
   // pnpm's progress goes straight to this terminal. No pipes: a process pnpm leaves
   // behind holding one open would keep spawnSync waiting after DSH has exited.
-  const add = spawnSync(command, [...prefix, 'plugin', '--profile', profile, 'add', plugin.file, mobileUi], { env: { ...process.env, DSH_HOME: home }, stdio: ['ignore', 'inherit', 'inherit'] });
+  const add = spawnSync(command, [...prefix, 'plugin', '--profile', profile, 'add', ...files], { env: { ...process.env, DSH_HOME: home }, stdio: ['ignore', 'inherit', 'inherit'] });
   if (add.error !== undefined) throw new Error(`cannot run ${command}: ${add.error.message} (is DSH installed? npm i -g @deepseek-ai/dsh)`);
   if (add.status !== 0) throw new Error(`dsh plugin add failed (${add.status ?? add.signal}); its output is above`);
-  return { version: plugin.version, files: [plugin.file, mobileUi], repaired };
+  return { version: plugin.version, files, repaired };
+}
+
+/** The version of `name` the profile lists and has installed, if any. */
+function installedVersion(profileDir: string, name: string): string | undefined {
+  try {
+    const manifest = JSON.parse(readFileSync(join(profileDir, 'package.json'), 'utf8')) as { dependencies?: Record<string, string> };
+    if (manifest.dependencies?.[name] === undefined) return undefined;
+    const installed = JSON.parse(readFileSync(join(profileDir, 'node_modules', name, 'package.json'), 'utf8')) as { version?: unknown };
+    return typeof installed.version === 'string' ? installed.version : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**

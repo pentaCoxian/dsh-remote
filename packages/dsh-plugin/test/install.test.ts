@@ -64,6 +64,36 @@ describe('installing from a local release directory', () => {
     expect(readdirSync(join(home, 'plugin-tarballs'))).toEqual(['dsh-remote-dsh-plugin-0.1.9.tgz']);
   });
 
+  /** A profile that has these versions installed from files. */
+  const installedProfile = (versions: Record<string, string>) => {
+    const root = profile(Object.fromEntries(Object.keys(versions).map((name) => [name, `file:/x/${name}.tgz`])));
+    for (const [name, version] of Object.entries(versions)) {
+      mkdirSync(join(root, 'node_modules', name), { recursive: true });
+      writeFileSync(join(root, 'node_modules', name, 'package.json'), JSON.stringify({ name, version }));
+    }
+  };
+  /** A `dsh` that records its arguments instead of installing. */
+  const recordingDsh = () => {
+    const record = join(dir, 'dsh-args.json');
+    return { dsh: [process.execPath, '-e', `require('fs').writeFileSync(${JSON.stringify(record)}, JSON.stringify(process.argv.slice(1)))`], args: () => (existsSync(record) ? JSON.parse(readFileSync(record, 'utf8')) : undefined) };
+  };
+
+  it('leaves a profile that already has these versions alone', async () => {
+    installedProfile({ [PLUGIN]: '0.1.10', [MOBILE_UI.name]: '0.6.0' });
+    const fake = recordingDsh();
+    const result = await install({ from: release(), dshHome: join(dir, 'home'), dsh: fake.dsh });
+    expect(result).toMatchObject({ version: '0.1.10', files: [] });
+    expect(fake.args()).toBeUndefined();
+  });
+
+  it('adds only the plugin when dsh-mobile-maxxing is already new enough, even newer than pinned', async () => {
+    installedProfile({ [PLUGIN]: '0.1.9', [MOBILE_UI.name]: '0.7.0' });
+    const fake = recordingDsh();
+    const result = await install({ from: release(), dshHome: join(dir, 'home'), dsh: fake.dsh });
+    expect(result.files.map((file) => file.split('/').pop())).toEqual(['dsh-remote-dsh-plugin-0.1.10.tgz']);
+    expect(fake.args()).toEqual(['plugin', '--profile', 'web', 'add', join(dir, 'home', 'plugin-tarballs', 'dsh-remote-dsh-plugin-0.1.10.tgz')]);
+  });
+
   it('names the file it could not find', async () => {
     await expect(install({ from: release(), version: '2.0.0', dshHome: join(dir, 'home') })).rejects.toThrow('no dsh-remote-dsh-plugin-2.0.0.tgz in');
   });
