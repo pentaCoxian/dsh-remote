@@ -1,0 +1,42 @@
+# DSH Remote push gateway: hosts' sealed notifications to APNs and FCM, over iroh.
+# Installed by infra/push/deploy.sh. Credentials come in through a drop-in
+# (dshr-push.service.d/credentials.conf) listing only the ones present.
+[Unit]
+Description=DSH Remote push gateway
+After=network-online.target iroh-relay.service
+Wants=network-online.target
+
+[Service]
+ExecStart=/opt/node/bin/node /opt/dshr-push/current/gateway.mjs
+WorkingDirectory=/opt/dshr-push/current
+EnvironmentFile=/etc/dshr-push/env
+Environment=NODE_ENV=production
+DynamicUser=yes
+StateDirectory=dshr-push
+StateDirectoryMode=0700
+Restart=always
+RestartSec=5
+MemoryMax=256M
+LimitNOFILE=65536
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+# iroh watches network interfaces over netlink.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

@@ -60,6 +60,7 @@ const transport = await GatewayTransport.start({
 });
 const online = await transport.online(15_000);
 console.log(`push-gateway: ${transport.endpointId} ${online ? 'online' : 'not yet connected to a relay'} via ${relays.length === 0 ? 'direct addresses' : relays.join(', ')}; platforms: ${Object.keys(active).join(', ') || 'none'}; ${store.size()} handles`);
+console.log(`push-gateway: ticket ${transport.ticket()}`);
 
 let last = { ...gateway.stats };
 const timer = setInterval(() => {

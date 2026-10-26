@@ -39,3 +39,32 @@ infra/tofu.sh output relay_urls
 curl -sI https://nrt1.relay.dshremote.pentacoxian.dev/ping       # 200 from iroh-relay
 ssh root@nrt1.relay.dshremote.pentacoxian.dev journalctl -u iroh-relay -n 50
 ```
+
+## Push gateway
+
+The push gateway (`packages/push-gateway`) runs on the pilot relay box, next to
+`iroh-relay`. It is reached over iroh (`dsh-remote/push/1`, home relay nrt1),
+so it needs no extra port, firewall rule or certificate.
+
+```sh
+infra/push/deploy.sh      # confirm with the owner first: it changes the live box
+```
+
+- **What it installs:**
+  - Node 24.17.0 under `/opt/node`, checked against its sha256.
+  - The bundle under `/opt/dshr-push/releases/<commit>`, with `/opt/dshr-push/current` pointing at it.
+  - The hardened unit `dshr-push.service`: DynamicUser, a 256 MB cap, no capabilities.
+- **Credentials:** read from `.env` (`APNS_KEY_FILE`, `APNS_KEY_ID`, `FCM_SERVICE_ACCOUNT_FILE`).
+  - They are copied to `/etc/dshr-push` (root, 0600) and passed in with `LoadCredential`.
+  - They are never printed.
+  - A platform without credentials stays off.
+- **Identity:** the gateway's iroh key lives in `/var/lib/private/dshr-push/endpoint-key`.
+  Hosts pin its EndpointId (`DEFAULT_PUSH_GATEWAY` in `packages/dsh-plugin/src/dsh/config.ts`).
+  When replacing the instance, carry the key over.
+- **SSH:** the deploy trusts only the host key in `infra/push/known_hosts`. It was recorded on
+  first contact on 2026-10-26: ED25519 `SHA256:j2TMSsBi+F99TsqYPY1cp79wrcshZxE4/bKSh1VdnGY`.
+- **Logs:** counts and short hashes only.
+
+```sh
+ssh -o UserKnownHostsFile=infra/push/known_hosts root@nrt1.relay.dshremote.pentacoxian.dev journalctl -u dshr-push -n 50
+```
