@@ -5,6 +5,10 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Push needs a Firebase project: put its google-services.json (not committed) next to this
+// file. Without it the app still builds, and reports notifications as unavailable.
+if (file("google-services.json").exists()) apply(plugin = "com.google.gms.google-services")
+
 android {
     namespace = "dev.dshremote.dsh_remote"
     // mobile_scanner 7 (CameraX 1.6) needs compileSdk 36; its plugins pin NDK 27.
@@ -47,4 +51,12 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    implementation(platform("com.google.firebase:firebase-bom:35.0.2"))
+    implementation("com.google.firebase:firebase-messaging")
+    implementation("androidx.core:core-ktx:1.16.0")
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20251224")
 }

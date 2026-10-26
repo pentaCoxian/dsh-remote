@@ -12,3 +12,6 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# Firebase project config for push (per developer; see app/build.gradle.kts).
+app/google-services.json

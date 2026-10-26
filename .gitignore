@@ -15,3 +15,6 @@ gate-origin.jsonl
 
 # local secrets (Cloudflare API token for deployment/provision.mjs)
 .env
+
+# Push credentials (APNs .p8, FCM service account); paths go in .env.
+.secrets/
