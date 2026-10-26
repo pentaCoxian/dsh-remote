@@ -5,7 +5,10 @@
 // Prints one JSON line {hostId, url}, approves every pairing request, and plays
 // the phone's keystore for tests that cannot do P-256 themselves: each stdin
 // line {"op":"generate"|"sign", ...} gets one JSON reply line. Exits when stdin closes.
+// With --offers <port>, GET http://127.0.0.1:<port>/offer returns a fresh {hostId, url}
+// (pairing codes live 120 s; a device test fetches its own once the app is installed).
 import { generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
+import { createServer } from 'node:http';
 import { createInterface } from 'node:readline';
 import { startLiveHost } from '../helpers/live.ts';
 
@@ -13,8 +16,15 @@ const live = await startLiveHost({ iroh: true });
 live.host.onPairingChange((request) => {
   if (request.state === 'pending') void live.host.approvePairing(request.pairingRequestId);
 });
-const offer = live.host.offerPairing('session-a');
-process.stdout.write(`${JSON.stringify({ hostId: live.host.hostId, url: offer.url })}\n`);
+const offer = () => ({ hostId: live.host.hostId, url: live.host.offerPairing('session-a').url });
+process.stdout.write(`${JSON.stringify(offer())}\n`);
+const offersPort = process.argv.includes('--offers') ? Number(process.argv[process.argv.indexOf('--offers') + 1]) : undefined;
+if (offersPort !== undefined) {
+  createServer((req, res) => {
+    if (req.url !== '/offer') return void res.writeHead(404).end();
+    res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(offer()));
+  }).listen(offersPort, '127.0.0.1');
+}
 
 const keys = new Map<string, KeyObject>();
 const lines = createInterface({ input: process.stdin });

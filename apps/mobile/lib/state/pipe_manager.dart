@@ -42,8 +42,17 @@ class PipeManager {
     return pipe.start(base64Decode(encoded), relays);
   }
 
-  /// Short, because Unix socket paths are limited to ~104 bytes and iOS sandbox paths are long.
-  String _path(String hostId) => '$socketDir/h${hostId.substring(0, 8)}';
+  /// Unix socket paths are limited to 104 bytes (`sockaddr_un`), and iOS
+  /// sandbox paths come close (devices) or go over (simulators). Past the limit
+  /// the socket is named relative to [socketDir], made the working directory:
+  /// both ends of the socket live in this process, so they resolve it alike.
+  String _path(String hostId) {
+    final name = 'h${hostId.substring(0, 8)}';
+    final absolute = '$socketDir/$name';
+    if (utf8.encode(absolute).length < 100) return absolute;
+    Directory.current = socketDir;
+    return name;
+  }
 
   /// The socket for [hostId], dialing [ticket] first when the pipe is not open.
   Future<String> socketFor(String hostId, String Function() ticket) => _shared(() => _open[hostId], (f) => f == null ? _open.remove(hostId) : _open[hostId] = f, () async {
