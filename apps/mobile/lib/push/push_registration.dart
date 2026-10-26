@@ -75,6 +75,16 @@ class PushRegistrar {
   final PipeManager pipes;
   final SecureStore store;
 
+  /// One registration change per host at a time: the app reconnecting while
+  /// the permission prompt closes must not mint a second key that races the first.
+  final Map<String, Future<void>> _queues = {};
+
+  Future<T> _serial<T>(String hostId, Future<T> Function() run) {
+    final next = (_queues[hostId] ?? Future<void>.value()).then((_) => run());
+    _queues[hostId] = next.then((_) {}, onError: (_) {});
+    return next;
+  }
+
   static String _name(String hostId) => 'dsh_remote.push.$hostId.v1';
 
   Future<_Local> _load(String hostId) async {
@@ -87,7 +97,10 @@ class PushRegistrar {
   /// Bring [session]'s registration up to date and report it. Does nothing
   /// visible unless asked: [enable] turns it back on after [disable], [events]
   /// changes what notifies, and [ask] may show the OS permission prompt (once).
-  Future<PushState> sync(HostSession session, {bool enable = false, PushEvents? events, bool ask = false}) async {
+  Future<PushState> sync(HostSession session, {bool enable = false, PushEvents? events, bool ask = false}) =>
+      _serial(session.host.hostId, () => _sync(session, enable: enable, events: events, ask: ask));
+
+  Future<PushState> _sync(HostSession session, {required bool enable, required PushEvents? events, required bool ask}) async {
     final hostId = session.host.hostId;
     var local = await _load(hostId);
     if (local.disabled && !enable) return PushState(PushAvailability.off, events: local.events);
@@ -125,20 +138,20 @@ class PushRegistrar {
   }
 
   /// Stop this host's notifications to this phone, and remember the choice.
-  Future<PushState> disable(HostSession session) async {
-    final hostId = session.host.hostId;
-    final local = await _load(hostId);
-    await session.api.unregisterPush();
-    await _drop(local);
-    await _save(hostId, _Local(events: local.events, disabled: true, asked: local.asked));
-    return PushState(PushAvailability.off, events: local.events);
-  }
+  Future<PushState> disable(HostSession session) => _serial(session.host.hostId, () async {
+        final hostId = session.host.hostId;
+        final local = await _load(hostId);
+        await session.api.unregisterPush();
+        await _drop(local);
+        await _save(hostId, _Local(events: local.events, disabled: true, asked: local.asked));
+        return PushState(PushAvailability.off, events: local.events);
+      });
 
   /// The host was forgotten on this phone: drop its handle and key, best effort.
-  Future<void> forget(String hostId) async {
-    await _drop(await _load(hostId)).catchError((_) {});
-    await store.delete(_name(hostId));
-  }
+  Future<void> forget(String hostId) => _serial(hostId, () async {
+        await _drop(await _load(hostId)).catchError((_) {});
+        await store.delete(_name(hostId));
+      });
 
   Future<void> _drop(_Local local) async {
     final handle = local.handle;
