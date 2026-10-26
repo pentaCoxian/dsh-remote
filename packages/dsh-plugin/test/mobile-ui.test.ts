@@ -23,7 +23,7 @@ describe('the phone layout requirement (dsh-mobile-maxxing)', () => {
   it('says how to install it when DSH Web does not load it', () => {
     const status = mobileUiStatus(undefined);
     expect(status).toMatchObject({ version: null, ok: false });
-    expect(status.problem).toContain('dsh plugin --profile web add https://github.com/kuraneko1/dsh-mobile-maxxing/releases/download/v0.6.0/dsh-mobile-maxxing-0.6.0.tgz');
+    expect(status.problem).toContain('run `dsh-remote upgrade`, then restart DSH');
   });
 
   it('asks for an update when it is too old or not what it claims', () => {

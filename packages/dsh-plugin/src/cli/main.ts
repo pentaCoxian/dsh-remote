@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 // dsh-remote: owner CLI for DSH Remote. Talks to the running DSH host over the
-// 0600 admin socket in $DSH_HOME/remote; it never contacts the network.
+// 0600 admin socket in $DSH_HOME/remote; only `upgrade` contacts the network (GitHub).
 import { join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import QRCode from 'qrcode';
 import { AdminClient } from '../admin/socket.ts';
 import type { DeviceSummary, PairingOffer, PendingPairing } from '../host.ts';
 import { stateDir } from '../dsh/plugin.ts';
+import { install } from '../install/installer.ts';
 import { runDoctor } from './doctor.ts';
 
 const HELP = `Usage: dsh-remote <command>
@@ -19,6 +20,9 @@ const HELP = `Usage: dsh-remote <command>
   publish <sessionId>         allow phones to see and control a session
   unpublish <sessionId>       stop remote access to a session (local work continues)
   doctor                      check the host, its state and its reachability without changing anything
+  upgrade [version] [--profile web]
+                              install the latest (or that) DSH Remote release and dsh-mobile-maxxing,
+                              then restart DSH to load it
 `;
 
 async function main(argv: string[]): Promise<number> {
@@ -28,6 +32,7 @@ async function main(argv: string[]): Promise<number> {
     return command === undefined ? 2 : 0;
   }
   if (command === 'doctor') return runDoctor(args);
+  if (command === 'upgrade') return upgrade(args);
   const client = await connect();
   try {
     switch (command) {
@@ -63,6 +68,23 @@ async function main(argv: string[]): Promise<number> {
     }
   } finally {
     client.close();
+  }
+}
+
+async function upgrade(args: string[]): Promise<number> {
+  const profile = flag(args, '--profile');
+  const version = args.find((arg, i) => !arg.startsWith('--') && args[i - 1] !== '--profile');
+  try {
+    const result = await install({
+      ...(version === undefined ? {} : { version: version.replace(/^v/, '') }),
+      ...(profile === undefined ? {} : { profile }),
+      log: (line) => process.stdout.write(`${line}\n`),
+    });
+    process.stdout.write(`\nDSH Remote ${result.version} is installed. Restart DSH (dsh web) to load it.\n`);
+    return 0;
+  } catch (error) {
+    process.stderr.write(`dsh-remote: ${error instanceof Error ? error.message : String(error)}\n`);
+    return 1;
   }
 }
 

@@ -14,7 +14,10 @@ export const MOBILE_UI = {
   minVersion: '0.6.0',
   /** The tested release; a versioned URL, because pnpm caches by URL. */
   tarball: TARBALL,
-  install: `dsh plugin --profile web add ${TARBALL}`,
+  /** SHA-256 of that tarball, checked by the installer before DSH sees it. */
+  sha256: '7d8888c56649cfd0ef96cc81853c14c6dedc6237ce6aae681c082f0c43f02dde',
+  /** Installs it from a checked local copy: a URL install would break later pnpm installs. */
+  install: 'run `dsh-remote upgrade`',
 } as const;
 
 export interface MobileUiStatus {

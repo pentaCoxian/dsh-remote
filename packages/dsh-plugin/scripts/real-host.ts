@@ -23,6 +23,7 @@ import QRCode from 'qrcode';
 import { AdminClient } from '../src/admin/socket.ts';
 import { DEFAULT_RELAYS } from '../src/dsh/config.ts';
 import { MOBILE_UI } from '../src/dsh/mobile-ui.ts';
+import { mobileUiTarball, repairProfile } from '../src/install/installer.ts';
 import type { PairingOffer, PendingPairing } from '../src/host.ts';
 
 const args = process.argv.slice(2);
@@ -61,7 +62,10 @@ children.push(spawn(process.execPath, [join(pluginDir, 'test/integration/fake-ll
 
 const env = { ...process.env, DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1', FAKE_LLM_KEY: 'dev' };
 const withMobileUi = !args.includes('--no-mobile-ui');
-const add = spawnSync(process.execPath, [dshBin, 'plugin', '--profile', 'web', 'add', pluginDir, ...(withMobileUi ? [MOBILE_UI.tarball] : [])], { env, encoding: 'utf8' });
+// As the installer does: from a checked local file, never a URL (pnpm cannot verify URL tarballs later).
+repairProfile(join(home, 'profiles', 'web'), (line) => console.log(line));
+const mobileUi = withMobileUi ? [await mobileUiTarball(join(home, 'plugin-tarballs'), undefined, (line) => console.log(line))] : [];
+const add = spawnSync(process.execPath, [dshBin, 'plugin', '--profile', 'web', 'add', pluginDir, ...mobileUi], { env, encoding: 'utf8' });
 if (!withMobileUi) spawnSync(process.execPath, [dshBin, 'plugin', '--profile', 'web', 'remove', MOBILE_UI.name], { env, encoding: 'utf8' });
 if (add.status !== 0) throw new Error(`dsh plugin add failed:\n${add.stdout}\n${add.stderr}`);
 
