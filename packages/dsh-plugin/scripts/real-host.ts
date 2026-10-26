@@ -9,7 +9,8 @@
 // request at once (never on a real host). --offers serves a fresh code at
 // http://127.0.0.1:PORT/offer, e.g. for `adb reverse` + `adb shell am start -d <code>`.
 // State persists in --home (default .dsh-home/real-host), so a paired phone stays paired.
-// --push-gateway sends notifications through that gateway (e.g. push-gateway's scripts/dev-gateway.ts).
+// Notifications go through the DSH Remote gateway on nrt1; --push-gateway TICKET picks another
+// (e.g. push-gateway's scripts/dev-gateway.ts), --push-gateway none turns them off.
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -29,7 +30,7 @@ const relaysOption = option('--relays') ?? 'default';
 const relays = relaysOption === 'none' ? [] : relaysOption === 'default' ? DEFAULT_RELAYS : relaysOption.split(',');
 const approve = args.includes('--approve');
 const offersPort = option('--offers') === undefined ? undefined : Number(option('--offers'));
-const pushGateway = option('--push-gateway') ?? null;
+const pushGateway = option('--push-gateway');
 const dshBin = join(dirname(createRequire(import.meta.url).resolve('@deepseek-ai/dsh/package.json')), 'lib', 'bin.js');
 
 if (!existsSync(join(pluginDir, 'dist/index.js'))) throw new Error('build the plugin first: pnpm --filter @dsh-remote/dsh-plugin build');
@@ -66,8 +67,7 @@ writeFileSync(
   config:
     hostName: Real DSH (dev)
     relays: ${JSON.stringify(relays)}
-    pushGateway: ${JSON.stringify(pushGateway)}
-- id: llm-pi-ai
+${pushGateway === undefined ? '' : `    pushGateway: ${pushGateway === 'none' ? 'null' : JSON.stringify(pushGateway)}\n`}- id: llm-pi-ai
   config:
     providers:
       fake:

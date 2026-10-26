@@ -41,7 +41,7 @@ printf '{\n  "name": "dshr-push",\n  "private": true,\n  "type": "module",\n  "d
 
 echo "uploading release $release to $host"
 remote "mkdir -p /opt/dshr-push/releases/$release"
-tar -C "$stage" -cf - gateway.mjs package.json package-lock.json | remote "tar -C /opt/dshr-push/releases/$release -xf -"
+COPYFILE_DISABLE=1 tar --no-xattrs -C "$stage" -cf - gateway.mjs package.json package-lock.json | remote "tar -C /opt/dshr-push/releases/$release -xf -"
 
 echo "copying credentials (not printed)"
 remote "install -d -m 0700 /etc/dshr-push /etc/systemd/system/dshr-push.service.d"

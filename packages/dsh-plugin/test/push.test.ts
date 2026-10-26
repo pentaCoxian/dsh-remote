@@ -6,6 +6,7 @@ import iroh from '@number0/iroh';
 import type { Endpoint } from '@number0/iroh';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { systemClock } from '../src/core/clock.ts';
+import { DEFAULT_PUSH_GATEWAY, parseConfig } from '../src/dsh/config.ts';
 import { HostState, type HostStateDocument } from '../src/core/state.ts';
 import { MemoryStore } from '../src/core/store.ts';
 import { startFakeDshWeb, type FakeDshWeb } from './helpers/fake-dsh-web.ts';
@@ -241,5 +242,23 @@ describe('state', () => {
     expect(state.device('dev_1')!.scopes).toEqual(['host:read', 'web:open', 'push:register']);
     expect(state.device('dev_2')!.scopes).toEqual(['host:read']);
     expect((await store.read())!.devices[0]!.scopes).toContain('push:register');
+  });
+});
+
+describe('config', () => {
+  it('sends through the nrt1 gateway by default, named by id and relay only', () => {
+    const parsed = parseConfig({});
+    expect(parsed.ok && parsed.config.pushGateway).toBe(DEFAULT_PUSH_GATEWAY);
+    const addr = EndpointTicket.fromString(DEFAULT_PUSH_GATEWAY!).endpointAddr();
+    expect(addr.id().toString()).toBe('724f928c8cd6d2201b01e6194ecd3d56e9aaaefc15f83aa980ba9d9ca018dfe2');
+    expect(addr.relayUrl()).toBe('https://nrt1.relay.dshremote.pentacoxian.dev/');
+    expect(addr.directAddresses()).toEqual([]);
+  });
+
+  it('turns notifications off with null and refuses anything but a ticket', () => {
+    const off = parseConfig({ pushGateway: null });
+    expect(off.ok && off.config.pushGateway).toBeNull();
+    expect(parseConfig({ pushGateway: 'https://push.example' }).ok).toBe(false);
+    expect(parseConfig({ pushGateway: 'endpointzz' }).ok).toBe(false);
   });
 });

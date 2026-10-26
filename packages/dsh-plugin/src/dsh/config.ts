@@ -27,10 +27,12 @@ export const DEFAULT_RELAYS: readonly string[] = [
 ];
 
 /**
- * The DSH Remote push gateway on the Tokyo relay box (infra/push/). It sees
- * only sealed envelopes; null until it is deployed.
+ * The DSH Remote push gateway on the Tokyo relay box (infra/push/), by its
+ * EndpointId and home relay only, so a new IP address cannot strand it. It
+ * sees only sealed envelopes.
  */
-export const DEFAULT_PUSH_GATEWAY: string | null = null;
+export const DEFAULT_PUSH_GATEWAY: string | null =
+  'endpointabze7eumrtlneia3ahtbstwnhvlotkvo7qk7qovjqc5j3hfaddp6eaiafvuhi5dqom5c6l3ooj2dcltsmvwgc6jomrzwq4tfnvxxizjoobsw45dbmnxxq2lbnyxgizlwf4';
 
 const LABEL = /^[^\x00-\x1f\x7f]{1,64}$/u;
 const KNOWN = new Set(['hostName', 'relays', 'grantTtlDays', 'remoteApprovalTimeoutSec', 'pushGateway']);
