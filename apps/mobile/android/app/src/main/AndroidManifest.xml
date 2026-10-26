@@ -1,6 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- iroh: QUIC to the host and its relay; network state for interface and route changes. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <application
-        android:label="dsh_remote"
+        android:label="DSH Remote"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

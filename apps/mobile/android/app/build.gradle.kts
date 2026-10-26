@@ -7,8 +7,9 @@ plugins {
 
 android {
     namespace = "dev.dshremote.dsh_remote"
-    compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    // mobile_scanner 7 (CameraX 1.6) needs compileSdk 36; its plugins pin NDK 27.
+    compileSdk = 36
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -24,10 +25,15 @@ android {
         applicationId = "dev.dshremote.dsh_remote"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // The iroh pipe (native/dshr_pipe) uses getifaddrs, Android 7.0+.
+        minSdk = maxOf(24, flutter.minSdkVersion)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // The ABIs native/build.sh builds the iroh pipe for.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
     }
 
     buildTypes {
