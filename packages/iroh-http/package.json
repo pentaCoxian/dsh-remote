@@ -1,0 +1,27 @@
+{
+  "name": "@dsh-remote/iroh-http",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "HTTP/1.1 over iroh QUIC bi-streams: the socket-like stream node:http needs, and a small client",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@number0/iroh": "1.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "5.9.3",
+    "vitest": "4.1.12"
+  }
+}

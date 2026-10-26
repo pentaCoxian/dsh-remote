@@ -36,12 +36,13 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:dsh": "pnpm --filter @dsh-remote/protocol build && pnpm build && vitest run --config vitest.integration.config.ts test/integration/dsh.itest.ts",
+    "test:dsh": "pnpm --filter @dsh-remote/protocol --filter @dsh-remote/iroh-http build && pnpm build && vitest run --config vitest.integration.config.ts test/integration/dsh.itest.ts",
     "dev:host": "node --conditions=source scripts/dev-host.ts",
     "test:relay": "vitest run --config vitest.integration.config.ts test/integration/relay.itest.ts",
     "dev:real-host": "node --conditions=source scripts/real-host.ts"
   },
   "dependencies": {
+    "@dsh-remote/iroh-http": "workspace:*",
     "@dsh-remote/protocol": "workspace:*",
     "@number0/iroh": "1.2.0",
     "qrcode": "1.5.4",

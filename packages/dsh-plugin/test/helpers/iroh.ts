@@ -1,7 +1,8 @@
 import { createServer, type Server, type Socket } from 'node:net';
+import { PeerStream } from '@dsh-remote/iroh-http';
 import iroh from '@number0/iroh';
 import type { Connection, Endpoint } from '@number0/iroh';
-import { ALPN, PeerStream } from '../../src/transport/iroh.ts';
+import { ALPN } from '../../src/transport/iroh.ts';
 
 const { Endpoint: EndpointClass, EndpointTicket, RelayMode, SecretKey } = iroh;
 
