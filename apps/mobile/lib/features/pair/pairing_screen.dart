@@ -88,7 +88,7 @@ class _Progress extends StatelessWidget {
     final (title, detail, busy) = switch (state.step) {
       PairingStep.connecting => ('Connecting to the host', 'Directly when possible, otherwise through an encrypted relay.', true),
       PairingStep.redeeming => ('Creating this phone’s key', 'The private key stays in this phone’s secure hardware.', true),
-      PairingStep.waiting => ('Waiting for approval', 'Approve this phone at the host (`dsh-remote pair`). The fingerprints must match.', true),
+      PairingStep.waiting => ('Waiting for approval', 'Approve this phone at the host, in DSH Web or `dsh-remote pair`. The fingerprints must match.', true),
       PairingStep.done => ('Paired', '', false),
       PairingStep.denied => ('Not approved', state.message ?? '', false),
       PairingStep.expired => ('Expired', state.message ?? '', false),

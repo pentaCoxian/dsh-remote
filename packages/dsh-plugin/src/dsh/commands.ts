@@ -1,4 +1,8 @@
+import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { shortPeerId } from '../core/peer.ts';
+import { dshHome } from '../install/installer.ts';
 import type { RemoteHost } from '../host.ts';
 import type { DshCommandInvocation, DshCommandResult } from './types.ts';
 
@@ -8,12 +12,27 @@ export interface RcRuntime {
   hostName: string;
 }
 
-const USAGE = 'Usage: /rc [status | pair | off | devices | revoke <deviceId>]';
+/** What DSH Web shows after `/rc ` while typing. */
+export const RC_HINT = 'pair | status | devices | revoke <deviceId>';
+const USAGE = `Usage: /rc [${RC_HINT}]`;
 
 /**
- * `/rc` and `/remote-control`. Command text is written to the DSH session log,
- * so replies carry no QR, challenge or link: the `/rc` card and
- * `dsh-remote pair` fetch those live from owner-only surfaces.
+ * The `dsh-remote` CLI as a user can run it: the profile's bin when DSH
+ * installed the plugin there (`~/.dsh/profiles/web/node_modules/.bin/dsh-remote`),
+ * else the bare name.
+ */
+export function cliCommand(env: NodeJS.ProcessEnv = process.env): string {
+  const bin = join(dshHome(env), 'profiles', 'web', 'node_modules', '.bin', 'dsh-remote');
+  if (!existsSync(bin)) return 'dsh-remote';
+  return bin.startsWith(`${homedir()}/`) ? `~/${bin.slice(homedir().length + 1)}` : bin;
+}
+
+/**
+ * `/rc` and `/remote-control`. DSH Web shows a command's reply as plain text
+ * and writes it to the session log, so it never carries a QR code or a pairing
+ * challenge. In DSH Web a bare `/rc` never gets here: the plugin's client
+ * module (client/client.js) opens the pairing dialog instead. Elsewhere,
+ * pairing happens in a terminal, with `dsh-remote pair`.
  */
 export function rcCommand(runtime: RcRuntime): (invocation: DshCommandInvocation) => Promise<DshCommandResult> {
   return async (invocation) => {
@@ -27,14 +46,14 @@ export function rcCommand(runtime: RcRuntime): (invocation: DshCommandInvocation
     switch (verb) {
       case '':
       case 'pair': {
-        await host.publish(sessionId);
+        const devices = host.devices().filter((d) => !d.revoked);
         return {
           kind: 'success',
           text: [
-            `Remote control is on for this session (${sessionId}).`,
-            `New phone: DSH Remote → Connect Host → scan the code in this card.`,
-            `Paired phone: DSH Remote → ${runtime.hostName} → Continue.`,
-            `From a terminal: dsh-remote pair --session ${sessionId}`,
+            `To pair a phone, send /rc on its own in DSH Web: it shows a QR code to scan in DSH Remote (Connect host), then the phone's key fingerprint to approve.`,
+            `Or run this in a terminal on this machine:`,
+            `  ${cliCommand()} pair`,
+            `Paired phones: ${devices.length}${devices.length === 0 ? '' : ` (${devices.map((d) => d.label).join(', ')})`}`,
           ].join('\n'),
         };
       }
@@ -47,14 +66,14 @@ export function rcCommand(runtime: RcRuntime): (invocation: DshCommandInvocation
           text: [
             `Host: ${status.hostName} (id ${shortPeerId(status.hostId)})`,
             `Relay: ${relay}`,
-            `This session: ${host.isPublished(sessionId) ? 'remote control on' : 'remote control off'}`,
-            `Published sessions: ${status.published.length}`,
             `Paired phones: ${devices.length}${devices.length === 0 ? '' : ` (${devices.map((d) => d.label).join(', ')})`}`,
             `Waiting for approval: ${status.pendingPairings}`,
+            `Notifications: ${status.push.gateway === null ? 'off (pushGateway is null)' : `on, through gateway ${shortPeerId(status.push.gateway)} (${status.push.devices} phone${status.push.devices === 1 ? '' : 's'} registered)`}`,
             ...(status.mobileUi === null ? [] : [`Phone layout: ${status.mobileUi.ok ? `dsh-mobile-maxxing ${status.mobileUi.version}` : `missing — ${status.mobileUi.problem}`}`]),
           ].join('\n'),
         };
       }
+      // From the native app: phones no longer use published sessions, but `off` keeps working.
       case 'off': {
         await host.unpublish(sessionId);
         return { kind: 'success', text: 'Remote control is off for this session. Local work continues; phones can no longer see or control it.' };

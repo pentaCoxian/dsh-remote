@@ -112,7 +112,14 @@ export interface DshContext {
     invalidate(principal?: unknown): void;
   };
   readonly commands: {
-    register(definition: { name: string; description: string; recordInput?: boolean; handler(invocation: DshCommandInvocation): DshCommandResult | Promise<DshCommandResult> }): () => void;
+    register(definition: {
+      name: string;
+      description: string;
+      /** Declares that the command takes arguments: DSH Web passes `/name args` to it instead of to the model. */
+      input?: { hint: string };
+      recordInput?: boolean;
+      handler(invocation: DshCommandInvocation): DshCommandResult | Promise<DshCommandResult>;
+    }): () => void;
   };
   on(event: 'approval/request', listener: (this: unknown, request: DshApprovalRequest, next: () => Promise<DshApprovalOutcome>) => Promise<DshApprovalOutcome>, options: { prepend: boolean }): () => void;
   /** Post-commit feed of every session's appended events (`@deepseek-ai/dsh-session`). */

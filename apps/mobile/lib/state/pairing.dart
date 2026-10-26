@@ -124,7 +124,7 @@ class PairingController extends AutoDisposeFamilyNotifier<PairingState, PairingP
       _key = null;
       state = state.copyWith(step: PairingStep.done, hostId: hostId);
     } on ApiException catch (error) {
-      state = state.copyWith(step: PairingStep.failed, message: error.code == 'CHALLENGE_INVALID' ? 'This code was already used or has expired. Run `dsh-remote pair` again.' : describeError(error));
+      state = state.copyWith(step: PairingStep.failed, message: error.code == 'CHALLENGE_INVALID' ? 'This code was already used or has expired. Show a new one with `/rc` or `dsh-remote pair`.' : describeError(error));
       await _abandon(hostId, alreadyPaired);
     } catch (error) {
       state = state.copyWith(step: PairingStep.failed, message: error is PipeException ? 'Cannot reach the host: ${error.message}' : 'Pairing failed: $error');

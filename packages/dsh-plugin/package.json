@@ -19,18 +19,25 @@
       "source": "./src/testing/harness.ts",
       "types": "./dist/testing/harness.d.ts",
       "default": "./dist/testing/harness.js"
-    }
+    },
+    "./client": "./client/client.js"
   },
   "bin": {
     "dsh-remote": "./dist/cli/main.js"
   },
   "files": [
     "dist",
+    "client",
     "cordis.patch.yml"
   ],
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": []
     }
   },
   "scripts": {

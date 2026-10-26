@@ -7,7 +7,7 @@ import '../../core/protocol.dart';
 import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
 
-/// In-app scanner for the `dshremote://pair?…` code from `dsh-remote pair`.
+/// In-app scanner for the `dshremote://pair?…` code from `/rc` in DSH Web or `dsh-remote pair`.
 class ScanScreen extends StatefulWidget {
   const ScanScreen({super.key});
 
@@ -79,7 +79,7 @@ class _ScanScreenState extends State<ScanScreen> {
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(28, 16, 28, 0),
-            child: CodeText('Scan the code from `dsh-remote pair` on the machine running DSH.', textAlign: TextAlign.center, style: theme.textTheme.bodySmall),
+            child: CodeText('Scan the code from `/rc` in DSH Web or `dsh-remote pair`.', textAlign: TextAlign.center, style: theme.textTheme.bodySmall),
           ),
           if (_error != null) Padding(padding: const EdgeInsets.fromLTRB(28, 10, 28, 0), child: Text(_error!, textAlign: TextAlign.center, style: theme.textTheme.bodySmall?.copyWith(color: t.danger))),
           const Spacer(),

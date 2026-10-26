@@ -65,7 +65,7 @@ class _Empty extends StatelessWidget {
         Text('No hosts yet', style: theme.textTheme.titleMedium),
         const SizedBox(height: 8),
         CodeText(
-          'Run `dsh-remote pair` on the machine running DSH, then scan its code. DSH Web opens here over an end-to-end encrypted connection.',
+          'Send `/rc` in DSH Web on the machine running DSH (or run `dsh-remote pair` there), then scan its code. DSH Web opens here over an end-to-end encrypted connection.',
           textAlign: TextAlign.center,
           style: theme.textTheme.bodySmall,
         ),

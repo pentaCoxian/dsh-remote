@@ -12,7 +12,7 @@ import { ensurePrivateDir, JsonFileStore } from '../core/store.ts';
 import { RemoteHost } from '../host.ts';
 import { DshAdapter } from './adapter.ts';
 import { adminRoute } from './admin-route.ts';
-import { rcCommand, type RcRuntime } from './commands.ts';
+import { RC_HINT, rcCommand, type RcRuntime } from './commands.ts';
 import type { PluginConfig } from './config.ts';
 import type { DshContext } from './types.ts';
 import type { WebGatewayOptions } from '../web/gateway.ts';
@@ -57,7 +57,8 @@ export function stateDir(env: NodeJS.ProcessEnv = process.env): string {
 export function registerCommands(ctx: DshContext, runtime: RcRuntime): void {
   const handler = rcCommand(runtime);
   for (const name of ['rc', 'remote-control']) {
-    ctx.effect(() => ctx.commands.register({ name, description: 'Continue this session from the DSH Remote phone app', recordInput: false, handler }), `dsh-remote: /${name}`);
+    // `input` makes DSH Web pass arguments (`/rc pair`) to the command; without it the composer sends such a line to the model.
+    ctx.effect(() => ctx.commands.register({ name, description: 'Use DSH Web from the DSH Remote phone app', input: { hint: RC_HINT }, recordInput: false, handler }), `dsh-remote: /${name}`);
   }
 }
 
