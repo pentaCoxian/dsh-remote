@@ -61,12 +61,23 @@ void main() {
       session.listenSession('session-a', frames.add);
       session.events.subscribe('session-a', after: snapshot.cursor);
       await _until(() => frames.any((f) => f['kind'] == 'subscribed'), 'subscribed');
+      // An earlier run's device may still hold the control lease on a long-lived fixture; take over like the app's "Take control".
+      await session.api.acquireLease('session-a', takeover: true);
       await session.api.sendPrompt('session-a', 'req_device_e2e_${DateTime.now().millisecondsSinceEpoch}', 'hello from the phone');
       await _until(() => frames.any((f) => f['kind'] == 'turn.finished'), 'the turn');
 
       final status = await container.read(pipeManagerProvider).status(hostId);
       expect(status.connected, isTrue);
       expect(status.remoteId, hostId);
+      final path = status.selected;
+      // The phone's own home relay comes up in the background (after its first net report).
+      var homeRelay = status.homeRelay;
+      for (var i = 0; i < 40 && homeRelay == null; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+        homeRelay = (await container.read(pipeManagerProvider).status(hostId)).homeRelay;
+      }
+      // ignore: avoid_print
+      print('DSHR path: ${path == null ? 'none' : path.relay ? 'relay' : 'direct'}, rtt ${path?.rttMs} ms, phone relay $homeRelay');
 
       // Clean up what pairing stored on the device.
       await container.read(hostsProvider.notifier).remove(hostId);

@@ -32,9 +32,10 @@ export interface TestSocket {
 
 /**
  * RemoteHost on FakeAdapter over loopback. With `iroh`, the host also runs a
- * real endpoint with relays off, bound to 127.0.0.1.
+ * real endpoint with relays off, bound to 127.0.0.1; with `relays`, one homed on
+ * those relays and bound to every interface, for phones on other machines.
  */
-export async function startLiveHost(options: { remoteApprovalTimeoutMs?: number; iroh?: boolean } = {}): Promise<LiveHost> {
+export async function startLiveHost(options: { remoteApprovalTimeoutMs?: number; iroh?: boolean; relays?: readonly string[] } = {}): Promise<LiveHost> {
   const adapter = new FakeAdapter();
   adapter.addSession('session-a', { cwd: '/home/me/secret-client/api', title: 'Refactor the API' });
   adapter.addSession('session-b', { cwd: '/home/me/other', title: 'Unpublished' });
@@ -47,7 +48,7 @@ export async function startLiveHost(options: { remoteApprovalTimeoutMs?: number;
     receiptsStore: new MemoryStore(),
     audit,
     loopback: { port: 0, identify: testPeerIdentity },
-    ...(options.iroh === true ? { iroh: { relays: [], bindAddr: '127.0.0.1:0' } } : {}),
+    ...(options.relays !== undefined ? { iroh: { relays: options.relays } } : options.iroh === true ? { iroh: { relays: [], bindAddr: '127.0.0.1:0' } } : {}),
     hostName: 'Home Lab',
     grantTtlMs: 90 * 24 * 3600_000,
     remoteApprovalTimeoutMs: options.remoteApprovalTimeoutMs ?? 2_000,
