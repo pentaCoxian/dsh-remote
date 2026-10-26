@@ -37,6 +37,7 @@ jobs:
           name: release-tarballs
           path: |
             packages/dsh-plugin/release/*.tgz
+            packages/dsh-plugin/release/install.mjs
             packages/push-gateway/release/*.tgz
           retention-days: 14
 

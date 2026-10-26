@@ -29,9 +29,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" $(find dist -name '*.tgz') \
+          gh release create "$GITHUB_REF_NAME" $(find dist -name '*.tgz' -o -name install.mjs) \
             --title "DSH Remote $GITHUB_REF_NAME" \
-            --notes "Install the plugin next to dsh-mobile-maxxing (see docs/setup.md):
-          \`dsh plugin --profile web add https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/dsh-remote-dsh-plugin-${GITHUB_REF_NAME#v}.tgz https://github.com/kuraneko1/dsh-mobile-maxxing/releases/download/v0.6.0/dsh-mobile-maxxing-0.6.0.tgz\`
+            --notes "Install or upgrade DSH Remote and dsh-mobile-maxxing in DSH (see docs/setup.md), then restart DSH:
+          \`curl -fsSL https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/install.mjs | node --input-type=module -\`
 
-          dsh-remote-push-gateway-*.tgz is the push gateway, for infra/push/deploy.sh."
+          It also repairs a profile set up with the v0.1.0 URL instructions. dsh-remote-push-gateway-*.tgz is the push gateway, for infra/push/deploy.sh."

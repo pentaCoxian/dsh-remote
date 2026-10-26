@@ -22,19 +22,27 @@ Pair only phones you control.
 From a release (built and smoke-tested by CI on every `v*` tag), on any machine with DSH:
 
 ```sh
-dsh plugin --profile web add \
-  https://github.com/pentaCoxian/dsh-remote/releases/download/v0.1.0/dsh-remote-dsh-plugin-0.1.0.tgz \
-  https://github.com/kuraneko1/dsh-mobile-maxxing/releases/download/v0.6.0/dsh-mobile-maxxing-0.6.0.tgz
+curl -fsSL https://github.com/pentaCoxian/dsh-remote/releases/latest/download/install.mjs | node --input-type=module -
 ```
+
+- **What it does:** downloads the release's plugin tarball and dsh-mobile-maxxing into
+  `$DSH_HOME/plugin-tarballs`, checks their SHA-256, then runs
+  `dsh plugin --profile web add <both files>`. Options go after the `-`: a version (`0.1.1`) and
+  `--profile <name>`.
+- **Why not `dsh plugin add <URL>`:** DSH's pnpm records no integrity for a tarball added by URL and
+  then refuses every later install in that profile (`ERR_PNPM_MISSING_TARBALL_INTEGRITY`). The
+  0.1.0 instructions did that; the installer repairs such a profile before adding the files.
+- **Upgrade later:** `dsh-remote upgrade [version]` does the same, or rerun the line above.
 
 Or from source:
 
 ```sh
 pnpm install
 pnpm -r build
-dsh plugin --profile web add "$PWD/packages/dsh-plugin" \
-  https://github.com/kuraneko1/dsh-mobile-maxxing/releases/download/v0.6.0/dsh-mobile-maxxing-0.6.0.tgz
+dsh plugin --profile web add "$PWD/packages/dsh-plugin" ~/.dsh/plugin-tarballs/dsh-mobile-maxxing-0.6.0.tgz
 ```
+
+(The installer above leaves that dsh-mobile-maxxing file there.)
 
 Then restart DSH.
 
@@ -99,11 +107,13 @@ node packages/dsh-plugin/dist/cli/main.js doctor     # or put `dsh-remote` on PA
 Work in DSH Web at `http://127.0.0.1:3080`, opened on the host or through an SSH port forward.
 
 - **Pair a new phone:**
-  1. Run `dsh-remote pair` in a terminal on the host.
+  1. In DSH Web, send `/rc` on its own (or pick it from the `/` menu). A dialog shows a pairing QR.
+     Without DSH Web, run `dsh-remote pair` in a terminal on the host; it prints the same QR.
   2. Scan the QR with DSH Remote → Connect Host, or with the camera app, which opens DSH Remote.
      The QR names this host's key, so the phone can only ever connect to this host.
-  3. Compare the key fingerprints on both screens and approve with `y`. Approving gives the phone
-     full DSH Web access.
+  3. Compare the key fingerprints on both screens and approve: the dialog's Approve button, or `y`
+     in the terminal. Approving gives the phone full DSH Web access.
+  The dialog is live only: the QR and the fingerprint never enter the session log.
 - **Use it:** tap the host in DSH Remote and DSH Web opens. Each opening is authorized by a request
   signed with the phone's hardware key, and DSH logs the phone in with its own owner cookie.
 - **Manage phones:** `dsh-remote devices`, `dsh-remote revoke <deviceId>`, `/rc devices`,
@@ -125,6 +135,5 @@ Work in DSH Web at `http://127.0.0.1:3080`, opened on the host or through an SSH
   opened by another `dsh` process cannot be controlled remotely.
 - **If DSH stops, the phone shows the host as offline.**
 - **DSH Web must listen on plain HTTP** (the default). An HTTPS-only DSH Web is not tunnelled.
-- **Notifications reach the phone only while DSH Web is on screen** until DSH Remote's own push
-  arrives (Web Push cannot run inside an app's WebView).
-- **The `/rc` QR card in DSH Web is not built yet.** Pair with `dsh-remote pair` in a terminal.
+- **Android notifications need a Firebase build of the app.** Without `google-services.json` the
+  Android app shows notifications as unavailable; iOS uses APNs.
