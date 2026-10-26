@@ -17,6 +17,7 @@ class MainActivity : FlutterActivity() {
         val messenger = flutterEngine.dartExecutor.binaryMessenger
         MethodChannel(messenger, "dev.dshremote/device_keys").setMethodCallHandler(DeviceKeys())
         push = PushChannel(this).also { MethodChannel(messenger, "dev.dshremote/push").setMethodCallHandler(it) }
+        MethodChannel(messenger, "dev.dshremote/webview").setMethodCallHandler(WebViewInsets(flutterEngine))
         PushNotifications.ensureChannels(this)
         IrohPipe.nativeInit(applicationContext)
 

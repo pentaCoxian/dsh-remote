@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 import '../../core/errors.dart';
 import '../../push/push_registration.dart';
@@ -133,6 +135,11 @@ class _WebScreenState extends ConsumerState<WebScreen> {
 
   WebViewController _createController() {
     final controller = WebViewController();
+    // Android gives the WebView insets for the whole screen; DSH Web sits below this app's bar (WebViewInsets.kt).
+    final platform = controller.platform;
+    if (platform is AndroidWebViewController) {
+      unawaited(const MethodChannel('dev.dshremote/webview').invokeMethod<void>('fitToPosition', {'id': platform.webViewIdentifier}).catchError((_) {}));
+    }
     unawaited(controller.setJavaScriptMode(JavaScriptMode.unrestricted));
     unawaited(controller.setNavigationDelegate(NavigationDelegate(
       onNavigationRequest: (request) {
