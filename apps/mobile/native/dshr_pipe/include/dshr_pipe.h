@@ -17,7 +17,11 @@ char *dshr_start(const uint8_t *secret_key, size_t secret_len, const char *relay
 char *dshr_open(const char *ticket, const char *socket_path);
 /* Stop serving a host (hex EndpointId). -> {closed} */
 char *dshr_close(const char *host_id);
-/* Connection details. -> {connected, remoteId?, paths:[{relay, selected, rttMs}], homeRelay} */
+/* Serve the host's DSH Web tunnel on 127.0.0.1 (preferred_port when free). -> {port} */
+char *dshr_open_web(const char *host_id, uint16_t preferred_port);
+/* Stop the host's DSH Web tunnel. -> {closed} */
+char *dshr_close_web(const char *host_id);
+/* Connection details. -> {connected, remoteId?, paths:[{relay, selected, rttMs}], homeRelay, webPort} */
 char *dshr_status(const char *host_id);
 /* Parse a ticket without dialing. -> {endpointId, relayUrls, directAddresses} */
 char *dshr_ticket_info(const char *ticket);

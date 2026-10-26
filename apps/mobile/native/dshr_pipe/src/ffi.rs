@@ -109,6 +109,32 @@ pub unsafe extern "C" fn dshr_close(host: *const c_char) -> *mut c_char {
     })
 }
 
+/// Serve one host's DSH Web tunnel on a 127.0.0.1 TCP port (`preferred_port` when free). -> {port}
+///
+/// # Safety
+/// `host` must be a valid C string.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dshr_open_web(host: *const c_char, preferred_port: u16) -> *mut c_char {
+    respond(|| {
+        let host = host_id(&unsafe { string(host, "host id") }?)?;
+        let pipes = current()?;
+        runtime().block_on(pipes.open_web(host, preferred_port))
+    })
+}
+
+/// Stop one host's DSH Web tunnel. -> {closed}
+///
+/// # Safety
+/// `host` must be a valid C string.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dshr_close_web(host: *const c_char) -> *mut c_char {
+    respond(|| {
+        let host = host_id(&unsafe { string(host, "host id") }?)?;
+        let pipes = current()?;
+        Ok(json!({ "closed": runtime().block_on(pipes.close_web(host)) }))
+    })
+}
+
 /// Connection details for one host: connected, paths (relay or direct, RTT), home relay.
 ///
 /// # Safety

@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use dshr_pipe::{parse_ticket, ticket_info, Pipes, ALPN};
+use dshr_pipe::{parse_ticket, ticket_info, Pipes, ALPN, WEB_ALPN};
 use iroh::endpoint::presets;
 use iroh::{Endpoint, RelayMode, SecretKey};
 use iroh_tickets::endpoint::EndpointTicket;
@@ -22,7 +22,7 @@ async fn echo_host() -> Endpoint {
 async fn echo_host_with(secret_key: SecretKey) -> Endpoint {
     let endpoint = Endpoint::builder(presets::Minimal)
         .secret_key(secret_key)
-        .alpns(vec![ALPN.to_vec()])
+        .alpns(vec![ALPN.to_vec(), WEB_ALPN.to_vec()])
         .relay_mode(RelayMode::Disabled)
         .bind()
         .await
@@ -32,9 +32,14 @@ async fn echo_host_with(secret_key: SecretKey) -> Endpoint {
         while let Some(incoming) = server.accept().await {
             tokio::spawn(async move {
                 let Ok(connection) = incoming.await else { return };
+                // Web streams answer with a marker, so a test can tell which ALPN carried them.
+                let web = connection.alpn() == WEB_ALPN;
                 while let Ok((mut send, mut recv)) = connection.accept_bi().await {
                     tokio::spawn(async move {
                         let buf = recv.read_to_end(64 * 1024).await.unwrap();
+                        if web {
+                            send.write_all(b"web:").await.unwrap();
+                        }
                         send.write_all(&buf.to_ascii_uppercase()).await.unwrap();
                         send.finish().unwrap();
                     });
@@ -130,6 +135,37 @@ async fn round_trip(path: &std::path::Path, text: &str) -> String {
     let mut reply = String::new();
     socket.read_to_string(&mut reply).await.unwrap();
     reply
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn serves_the_web_tunnel_on_a_loopback_port() {
+    use tokio::net::TcpStream;
+    let host = echo_host().await;
+    let pipes = Pipes::start(SecretKey::generate().to_bytes(), &[]).await.unwrap();
+    assert!(pipes.open_web(host.id(), 0).await.unwrap_err().contains("open the host first"));
+    pipes.open(&EndpointTicket::new(host.addr()).to_string(), &socket_path("web")).await.unwrap();
+
+    // The preferred port when it is free, so the WebView keeps one origin.
+    let free = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let opened = pipes.open_web(host.id(), free).await.unwrap();
+    assert_eq!(opened["port"], free);
+    assert_eq!(pipes.open_web(host.id(), 1).await.unwrap()["port"], free, "reopening keeps the port");
+    assert_eq!(pipes.status(host.id()).await["webPort"], free);
+
+    let mut socket = TcpStream::connect(("127.0.0.1", free)).await.unwrap();
+    socket.write_all(b"get /").await.unwrap();
+    socket.shutdown().await.unwrap();
+    let mut reply = String::new();
+    socket.read_to_string(&mut reply).await.unwrap();
+    assert_eq!(reply, "web:GET /");
+    // The API socket still talks over the API ALPN.
+    assert_eq!(round_trip(&socket_path("web"), "api").await, "API");
+
+    assert!(pipes.close_web(host.id()).await);
+    assert!(TcpStream::connect(("127.0.0.1", free)).await.is_err());
+    assert_eq!(round_trip(&socket_path("web"), "still").await, "STILL");
+    pipes.shutdown().await;
+    host.close().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]

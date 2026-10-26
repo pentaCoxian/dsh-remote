@@ -18,8 +18,8 @@ use iroh::endpoint::{presets, Connection};
 use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMap, RelayMode, RelayUrl, SecretKey};
 use iroh_tickets::endpoint::EndpointTicket;
 use serde_json::{json, Value};
-use tokio::io::AsyncWriteExt;
-use tokio::net::{UnixListener, UnixStream};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
+use tokio::net::{TcpListener, UnixListener};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 
@@ -27,6 +27,8 @@ pub mod ffi;
 
 /// ALPN of the DSH Remote API over iroh (the host plugin's `ALPN`).
 pub const ALPN: &[u8] = b"dsh-remote/1";
+/// ALPN of the DSH Web tunnel: each bi-stream is one connection to DSH Web on the host.
+pub const WEB_ALPN: &[u8] = b"dsh-remote/web/1";
 const DIAL_TIMEOUT: Duration = Duration::from_secs(15);
 /// How long the host may keep answering after the app closed its side of a socket.
 const DRAIN_TIMEOUT: Duration = Duration::from_secs(30);
@@ -58,11 +60,20 @@ struct Pipe {
     link: Arc<Link>,
     socket_path: PathBuf,
     accept: JoinHandle<()>,
+    web: Option<WebPipe>,
 }
 
-/// One host: where to dial it and the connection while it lasts.
+/// The DSH Web tunnel for one host: a loopback TCP port for the app's WebView.
+struct WebPipe {
+    link: Arc<Link>,
+    port: u16,
+    accept: JoinHandle<()>,
+}
+
+/// One host on one ALPN: where to dial it and the connection while it lasts.
 struct Link {
     endpoint: Endpoint,
+    alpn: &'static [u8],
     addr: std::sync::Mutex<EndpointAddr>,
     connection: Mutex<Option<Connection>>,
 }
@@ -77,7 +88,7 @@ impl Link {
             return Ok(connection.clone());
         }
         let addr = self.addr.lock().expect("addr lock").clone();
-        let connection = tokio::time::timeout(DIAL_TIMEOUT, self.endpoint.connect(addr, ALPN))
+        let connection = tokio::time::timeout(DIAL_TIMEOUT, self.endpoint.connect(addr, self.alpn))
             .await
             .map_err(|_| "the host did not answer".to_string())?
             .map_err(|e| format!("cannot reach the host: {e}"))?;
@@ -129,18 +140,55 @@ impl Pipes {
         let host = addr.id;
         let mut pipes = self.pipes.lock().await;
         if let Some(pipe) = pipes.get(&host) {
-            *pipe.link.addr.lock().expect("addr lock") = addr;
+            *pipe.link.addr.lock().expect("addr lock") = addr.clone();
+            if let Some(web) = &pipe.web {
+                *web.link.addr.lock().expect("addr lock") = addr;
+            }
             pipe.link.connection().await?;
             return Ok(json!({ "hostId": host.to_string(), "socketPath": pipe.socket_path }));
         }
-        let link = Arc::new(Link { endpoint: self.endpoint.clone(), addr: std::sync::Mutex::new(addr), connection: Mutex::new(None) });
+        let link = Arc::new(Link { endpoint: self.endpoint.clone(), alpn: ALPN, addr: std::sync::Mutex::new(addr), connection: Mutex::new(None) });
         link.connection().await?;
         let _ = tokio::fs::remove_file(socket_path).await;
         let listener = UnixListener::bind(socket_path).map_err(|e| format!("cannot listen on {}: {e}", socket_path.display()))?;
         std::fs::set_permissions(socket_path, std::fs::Permissions::from_mode(0o600)).map_err(|e| format!("cannot restrict the socket: {e}"))?;
         let accept = tokio::spawn(serve(listener, link.clone()));
-        pipes.insert(host, Pipe { link, socket_path: socket_path.to_path_buf(), accept });
+        pipes.insert(host, Pipe { link, socket_path: socket_path.to_path_buf(), accept, web: None });
         Ok(json!({ "hostId": host.to_string(), "socketPath": socket_path }))
+    }
+
+    /// Serve the host's DSH Web tunnel on a 127.0.0.1 TCP port for the WebView,
+    /// `preferred_port` when free (a stable origin keeps DSH Web's browser
+    /// storage), else any. The host must have an open pipe, and must have
+    /// opened this phone's web window (`POST /v1/web/session`) first. Other apps
+    /// on the phone can reach the port but not DSH Web: DSH still wants its
+    /// owner cookie, which only this app's WebView holds.
+    pub async fn open_web(&self, host: EndpointId, preferred_port: u16) -> Result<Value> {
+        let mut pipes = self.pipes.lock().await;
+        let pipe = pipes.get_mut(&host).ok_or_else(|| "open the host first".to_string())?;
+        if let Some(web) = &pipe.web {
+            web.link.connection().await?;
+            return Ok(json!({ "port": web.port }));
+        }
+        let addr = pipe.link.addr.lock().expect("addr lock").clone();
+        let link = Arc::new(Link { endpoint: self.endpoint.clone(), alpn: WEB_ALPN, addr: std::sync::Mutex::new(addr), connection: Mutex::new(None) });
+        link.connection().await?;
+        let listener = match TcpListener::bind(("127.0.0.1", preferred_port)).await {
+            Ok(listener) => listener,
+            Err(_) => TcpListener::bind(("127.0.0.1", 0)).await.map_err(|e| format!("cannot listen for the web view: {e}"))?,
+        };
+        let port = listener.local_addr().map_err(|e| e.to_string())?.port();
+        let accept = tokio::spawn(serve_tcp(listener, link.clone()));
+        pipe.web = Some(WebPipe { link, port, accept });
+        Ok(json!({ "port": port }))
+    }
+
+    /// Stop the host's DSH Web tunnel; the API pipe stays.
+    pub async fn close_web(&self, host: EndpointId) -> bool {
+        let web = self.pipes.lock().await.get_mut(&host).and_then(|pipe| pipe.web.take());
+        let Some(web) = web else { return false };
+        stop_web(web).await;
+        true
     }
 
     /// Stop serving `host` and hang up.
@@ -153,7 +201,11 @@ impl Pipes {
     pub async fn status(&self, host: EndpointId) -> Value {
         let pipes = self.pipes.lock().await;
         let mut status = match pipes.get(&host) {
-            Some(pipe) => pipe.link.status().await,
+            Some(pipe) => {
+                let mut status = pipe.link.status().await;
+                status["webPort"] = json!(pipe.web.as_ref().map(|web| web.port));
+                status
+            }
             None => json!({ "connected": false, "paths": [], "open": false }),
         };
         status["homeRelay"] = json!(self.endpoint.addr().relay_urls().next().map(|url| url.to_string()));
@@ -175,7 +227,10 @@ impl Pipes {
     }
 }
 
-async fn stop_pipe(pipe: Pipe) {
+async fn stop_pipe(mut pipe: Pipe) {
+    if let Some(web) = pipe.web.take() {
+        stop_web(web).await;
+    }
     pipe.accept.abort();
     if let Some(connection) = pipe.link.connection.lock().await.take() {
         connection.close(0u32.into(), b"closed by app");
@@ -183,21 +238,43 @@ async fn stop_pipe(pipe: Pipe) {
     let _ = tokio::fs::remove_file(&pipe.socket_path).await;
 }
 
+async fn stop_web(web: WebPipe) {
+    web.accept.abort();
+    if let Some(connection) = web.link.connection.lock().await.take() {
+        connection.close(0u32.into(), b"closed by app");
+    }
+}
+
 async fn serve(listener: UnixListener, link: Arc<Link>) {
     while let Ok((socket, _)) = listener.accept().await {
         let link = link.clone();
         tokio::spawn(async move {
             // A host that cannot be reached drops the socket: the app sees it as offline.
-            let _ = bridge(socket, &link).await;
+            let (from_app, to_app) = socket.into_split();
+            let _ = bridge(from_app, to_app, &link).await;
         });
     }
 }
 
-/// Copy one socket connection over one bi-stream, both ways, until both sides end.
-async fn bridge(socket: UnixStream, link: &Link) -> Result<()> {
+async fn serve_tcp(listener: TcpListener, link: Arc<Link>) {
+    while let Ok((socket, _)) = listener.accept().await {
+        let _ = socket.set_nodelay(true);
+        let link = link.clone();
+        tokio::spawn(async move {
+            let (from_app, to_app) = socket.into_split();
+            let _ = bridge(from_app, to_app, &link).await;
+        });
+    }
+}
+
+/// Copy one app-side connection over one bi-stream, both ways, until both sides end.
+async fn bridge<R, W>(mut from_app: R, mut to_app: W, link: &Link) -> Result<()>
+where
+    R: AsyncRead + Unpin + Send + 'static,
+    W: AsyncWrite + Unpin + Send + 'static,
+{
     let connection = link.connection().await?;
     let (mut send, mut recv) = connection.open_bi().await.map_err(|e| format!("cannot open a stream: {e}"))?;
-    let (mut from_app, mut to_app) = socket.into_split();
     let mut down = tokio::spawn(async move {
         let _ = tokio::io::copy(&mut recv, &mut to_app).await;
         let _ = to_app.shutdown().await;
