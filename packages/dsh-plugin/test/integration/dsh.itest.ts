@@ -10,7 +10,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CLOSE_CODES, parsePairingUrl } from '@dsh-remote/protocol';
+import { CLOSE_CODES, parsePairingUrl, WEB_ALPN } from '@dsh-remote/protocol';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { AdminClient } from '../../src/admin/socket.ts';
@@ -25,6 +25,7 @@ let home: string;
 let dsh: ChildProcess;
 let fakeModel: ChildProcess;
 let dialer: IrohDialer;
+let tunnel: IrohDialer | undefined;
 let admin: AdminClient;
 let sessionId: string;
 let phone: TestPhone;
@@ -104,6 +105,7 @@ beforeAll(async () => {
 afterAll(async () => {
   admin?.close();
   await dialer?.close();
+  await tunnel?.close();
   dsh?.kill('SIGTERM');
   fakeModel?.kill();
   await new Promise((resolve) => setTimeout(resolve, 500));
@@ -143,6 +145,26 @@ describe('DSH Remote inside dsh web 0.2.1-rc.3', () => {
     const reply = await signed({ method: 'GET', target: `/v1/sessions/${sessionId}` });
     expect(reply.status).toBe(200);
     expect(reply.json.session.sessionId).toBe(sessionId);
+  });
+
+  it('tunnels the real DSH Web: DSH’s own fence and owner login accept the phone-side origin', async () => {
+    const session = await signed({ method: 'POST', target: '/v1/web/session' });
+    expect(session.status).toBe(200);
+    expect(session.json.tokenQuery).toMatch(/^token=[A-Za-z0-9_-]+$/);
+    const status = await admin.call<HostStatus>({ method: 'status' });
+    expect(status.web).toBe('ready');
+
+    tunnel = await dialTicket(parsePairingUrl((await admin.call<PairingOffer>({ method: 'offerPairing' })).url)!.ticket, { secretKey: dialer.secretKey, alpn: WEB_ALPN });
+    const browse = (target: string, cookie?: string) =>
+      send(tunnel!.port, { method: 'GET', target, host: `127.0.0.1:${tunnel!.port}`, headers: { origin: `http://127.0.0.1:${tunnel!.port}`, ...(cookie === undefined ? {} : { cookie }) } });
+    expect((await browse('/')).status).toBe(401);
+    const login = await browse(`/?${session.json.tokenQuery}`);
+    expect(login.status).toBe(303);
+    const cookie = String(login.headers['set-cookie']).split(';')[0]!;
+    expect(cookie).toMatch(/^dsh-auth-/);
+    const index = await browse('/', cookie);
+    expect(index.status).toBe(200);
+    expect(index.headers['content-type']).toMatch(/text\/html/);
   });
 
   it('runs a phone prompt through DSH, answers its tool approval from the phone, and streams the turn', async () => {

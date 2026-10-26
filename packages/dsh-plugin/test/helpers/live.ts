@@ -5,6 +5,7 @@ import { systemClock } from '../../src/core/clock.ts';
 import { HostKey } from '../../src/core/host-key.ts';
 import { MemoryStore } from '../../src/core/store.ts';
 import { RemoteHost } from '../../src/host.ts';
+import type { WebGatewayOptions } from '../../src/web/gateway.ts';
 import { FakeAdapter } from '../../src/testing/fake-adapter.ts';
 import { send, TEST_PEER_HEADER, testPeerIdentity, toBody, TestPhone, type Reply, type SendOptions } from './phone.ts';
 
@@ -35,7 +36,7 @@ export interface TestSocket {
  * real endpoint with relays off, bound to 127.0.0.1; with `relays`, one homed on
  * those relays and bound to every interface, for phones on other machines.
  */
-export async function startLiveHost(options: { remoteApprovalTimeoutMs?: number; iroh?: boolean; relays?: readonly string[] } = {}): Promise<LiveHost> {
+export async function startLiveHost(options: { remoteApprovalTimeoutMs?: number; iroh?: boolean; relays?: readonly string[]; web?: WebGatewayOptions } = {}): Promise<LiveHost> {
   const adapter = new FakeAdapter();
   adapter.addSession('session-a', { cwd: '/home/me/secret-client/api', title: 'Refactor the API' });
   adapter.addSession('session-b', { cwd: '/home/me/other', title: 'Unpublished' });
@@ -50,6 +51,7 @@ export async function startLiveHost(options: { remoteApprovalTimeoutMs?: number;
     loopback: { port: 0, identify: testPeerIdentity },
     ...(options.relays !== undefined ? { iroh: { relays: options.relays } } : options.iroh === true ? { iroh: { relays: [], bindAddr: '127.0.0.1:0' } } : {}),
     hostName: 'Home Lab',
+    ...(options.web === undefined ? {} : { web: options.web }),
     grantTtlMs: 90 * 24 * 3600_000,
     remoteApprovalTimeoutMs: options.remoteApprovalTimeoutMs ?? 2_000,
     heartbeatMs: 150,

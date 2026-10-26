@@ -12,6 +12,8 @@ const { Endpoint: EndpointClass, EndpointTicket, RelayMode, SecretKey } = iroh;
  */
 export interface IrohDialer {
   readonly peerId: string;
+  /** The dialer's iroh key, to dial again as the same peer (e.g. the web tunnel). */
+  readonly secretKey: number[];
   readonly endpoint: Endpoint;
   readonly connection: Connection;
   /** Loopback port that tunnels to the host. */
@@ -19,14 +21,15 @@ export interface IrohDialer {
   close(): Promise<void>;
 }
 
-export async function dialTicket(ticket: string, options: { secretKey?: number[]; relays?: string[] } = {}): Promise<IrohDialer> {
+export async function dialTicket(ticket: string, options: { secretKey?: number[]; relays?: string[]; alpn?: string } = {}): Promise<IrohDialer> {
   const builder = EndpointClass.builder();
   builder.applyMinimal();
   // Default bind: a loopback-only socket could not reach a host's LAN addresses.
   builder.relayMode(options.relays === undefined ? RelayMode.disabled() : RelayMode.customFromUrls(options.relays));
-  builder.secretKey(options.secretKey ?? SecretKey.generate().toBytes());
+  const secretKey = options.secretKey ?? SecretKey.generate().toBytes();
+  builder.secretKey(secretKey);
   const endpoint = await builder.bind();
-  const connection = await endpoint.connect(EndpointTicket.fromString(ticket).endpointAddr(), Array.from(Buffer.from(ALPN, 'utf8')));
+  const connection = await endpoint.connect(EndpointTicket.fromString(ticket).endpointAddr(), Array.from(Buffer.from(options.alpn ?? ALPN, 'utf8')));
   const sockets = new Set<Socket>();
   const server: Server = createServer((socket) => {
     sockets.add(socket);
@@ -47,6 +50,7 @@ export async function dialTicket(ticket: string, options: { secretKey?: number[]
   const port = (server.address() as { port: number }).port;
   return {
     peerId: endpoint.id().toString(),
+    secretKey,
     endpoint,
     connection,
     port,

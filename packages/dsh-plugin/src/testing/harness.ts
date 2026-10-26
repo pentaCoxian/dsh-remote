@@ -12,7 +12,7 @@ import { registerCommands, startRemote, stateDir } from '../dsh/plugin.ts';
 import type { DshContext } from '../dsh/types.ts';
 
 export const name = 'dsh-remote-test-harness';
-export const inject = ['commands', 'connection', 'typertGateway', 'remoteAccess', 'sessionController'];
+export const inject = ['commands', 'connection', 'typertGateway', 'remoteAccess', 'sessionController', 'webServer'];
 
 interface HarnessContext extends DshContext {
   readonly sessionController: DshContext['sessionController'] & { create(request: Record<string, never>): Promise<{ sessionId: string }> };

@@ -1,7 +1,10 @@
 /** Wire protocol major version carried in `X-DSH-Protocol` and every frame's `v`. */
 export const PROTOCOL_VERSION = 1;
-/** Minor version of the v1 contract this package implements (1: iroh transport, unsigned grants). */
-export const PROTOCOL_MINOR = 1;
+/** Minor version of the v1 contract this package implements (1: iroh transport, unsigned grants; 2: DSH Web tunnel). */
+export const PROTOCOL_MINOR = 2;
+
+/** ALPN of the DSH Web tunnel: each bi-stream is one TCP connection to DSH Web's loopback listener. */
+export const WEB_ALPN = 'dsh-remote/web/1';
 
 /** Request-proof headers (spec §5), lowercase as Node exposes them. */
 export const HEADERS = {
@@ -39,6 +42,8 @@ export const SCOPES = [
   'session:write',
   'approval:read',
   'approval:respond',
+  /** Open DSH Web through the tunnel: full owner access on the host. */
+  'web:open',
 ] as const;
 export type Scope = (typeof SCOPES)[number];
 

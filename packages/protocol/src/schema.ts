@@ -27,6 +27,7 @@ export type SchemaName =
   | 'PairStatusResponse'
   | 'DeviceGrant'
   | 'HostAddress'
+  | 'WebSession'
   | 'Lease'
   | 'ServerFrame';
 

@@ -1,9 +1,11 @@
 import type { IncomingMessage } from 'node:http';
+import type { Duplex } from 'node:stream';
 import { buildPairingUrl, shortFingerprint } from '@dsh-remote/protocol';
 import { EventsSocket } from './api/events.ts';
 import { metaRoutes } from './api/meta.ts';
 import { pairingRoutes } from './api/pairing.ts';
 import { sessionRoutes } from './api/sessions.ts';
+import { webRoutes } from './api/web.ts';
 import type { SessionAdapter } from './core/adapter.ts';
 import { Approvals } from './core/approvals.ts';
 import type { Audit } from './core/audit.ts';
@@ -19,6 +21,7 @@ import { HostState, type DeviceRecord, type HostStateDocument } from './core/sta
 import type { DocumentStore } from './core/store.ts';
 import { NativeApi } from './http/server.ts';
 import { bareTicket, IrohTransport, type TransportStatus } from './transport/iroh.ts';
+import { WebGateway, type WebGatewayOptions } from './web/gateway.ts';
 
 export interface RemoteHostOptions {
   /** The DSH binding, or a factory for one that needs the opened host state. */
@@ -31,6 +34,8 @@ export interface RemoteHostOptions {
   readonly audit: Audit;
   /** The production transport. `relays: []` means direct and LAN addresses only. */
   readonly iroh?: { readonly relays: readonly string[]; readonly bindAddr?: string };
+  /** The DSH Web tunnel; absent, the host serves only the native API. */
+  readonly web?: WebGatewayOptions;
   /** TESTS AND THE DEV HOST ONLY: also serve 127.0.0.1:`port`, taking each request's peer from `identify`. */
   readonly loopback?: { readonly port: number; identify(req: IncomingMessage): PeerIdentity | undefined };
   readonly hostName: string;
@@ -90,6 +95,8 @@ export interface HostStatus {
   readonly transport: TransportStatus | null;
   /** A loopback TCP listener exists only in tests and the dev host. */
   readonly loopbackPort: number | null;
+  /** The DSH Web tunnel: null when not configured, else why it cannot serve (or 'ready'). */
+  readonly web: string | null;
   readonly published: string[];
   readonly devices: number;
   readonly pendingPairings: number;
@@ -110,6 +117,7 @@ export class RemoteHost {
   readonly api: NativeApi;
   readonly socket: EventsSocket;
   readonly adapter: SessionAdapter;
+  readonly web: WebGateway | undefined;
   private readonly options: RemoteHostOptions;
   private readonly disposers: (() => void)[] = [];
   private transport: IrohTransport | undefined;
@@ -128,11 +136,13 @@ export class RemoteHost {
     this.approvals = new Approvals(state, this.events, clock, { remoteTimeoutMs: options.remoteApprovalTimeoutMs });
     this.socket = new EventsSocket({ events: this.events, state, leases: this.leases, approvals: this.approvals, clock, ...(options.heartbeatMs === undefined ? {} : { heartbeatMs: options.heartbeatMs }) });
     const proof = new ProofVerifier(state, clock, options.bootMs ?? clock.now());
+    this.web = options.web === undefined ? undefined : new WebGateway(state, clock, options.web);
     this.api = new NativeApi({
       proof,
       routes: [
         ...metaRoutes({ hostId, clock, hostName: options.hostName, capabilities: CAPABILITIES, address: () => this.address() }),
         ...pairingRoutes({ pairing: this.pairing, proof }),
+        ...(this.web === undefined ? [] : webRoutes(this.web)),
         ...sessionRoutes({ adapter: this.adapter, state, events: this.events, receipts, leases: this.leases, approvals: this.approvals, clock }),
       ],
       upgrade: this.socket.route,
@@ -170,6 +180,7 @@ export class RemoteHost {
       this.state.onDeviceRevoked((device) => {
         this.leases.releaseDevice(device.deviceId);
         adapter.accessChanged();
+        this.web?.forget(device.peerId);
         // Hang up after a grace period, so the 4403 close frame and in-flight replies reach the
         // phone first; keep the connection if another live grant uses the same phone key.
         const timer = setTimeout(() => {
@@ -186,6 +197,7 @@ export class RemoteHost {
         relays: this.options.iroh.relays,
         ...(this.options.iroh.bindAddr === undefined ? {} : { bindAddr: this.options.iroh.bindAddr }),
         onStream: (stream, peer) => this.api.accept(stream, peer),
+        ...(this.web === undefined ? {} : { web: { allowWeb: (peer: PeerIdentity) => this.web!.allows(peer), onWebStream: (stream: Duplex, peer: PeerIdentity) => this.web!.pipe(stream, peer) } }),
       });
     }
     if (this.options.loopback !== undefined) this.listeningPort = await this.api.listen(this.options.loopback.port);
@@ -266,6 +278,7 @@ export class RemoteHost {
       entry: this.options.entry ?? 'unknown',
       transport: this.transport?.status() ?? null,
       loopbackPort: this.listeningPort ?? null,
+      web: this.web === undefined ? null : (this.web.unavailable() ?? 'ready'),
       published: this.state.publications().map((p) => p.sessionId),
       devices: this.state.devices().filter((d) => d.revokedAt === null).length,
       pendingPairings: this.pairing.pending().length,

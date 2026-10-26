@@ -9,7 +9,7 @@ import type { RcRuntime } from './dsh/commands.ts';
 import type { DshContext } from './dsh/types.ts';
 
 export const name = 'dsh-remote';
-export const inject = ['commands', 'connection', 'typertGateway', 'remoteAccess', 'sessionController'];
+export const inject = ['commands', 'connection', 'typertGateway', 'remoteAccess', 'sessionController', 'webServer'];
 
 export function apply(ctx: DshContext, rawConfig: unknown): void {
   const parsed = parseConfig(rawConfig);

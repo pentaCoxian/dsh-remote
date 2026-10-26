@@ -15,6 +15,30 @@ import { adminRoute } from './admin-route.ts';
 import { rcCommand, type RcRuntime } from './commands.ts';
 import type { PluginConfig } from './config.ts';
 import type { DshContext } from './types.ts';
+import type { WebGatewayOptions } from '../web/gateway.ts';
+
+/**
+ * DSH Web as the tunnel's target: its own loopback listener and its own owner
+ * login. HTTPS listeners are not tunnelled (the phone-side origin is plain HTTP).
+ */
+export function dshWeb(ctx: DshContext): WebGatewayOptions {
+  return {
+    target: () => {
+      const { port, protocol } = ctx.webServer;
+      if (port === undefined || protocol !== 'http:') return undefined;
+      const host = ctx.webServer.host;
+      return { host: host === undefined || host === '' || host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host, port };
+    },
+    launchTokenQuery: () => {
+      try {
+        const token = new URL(ctx.connection.authenticatedUrl('http://127.0.0.1/')).searchParams.get('token');
+        return token === null ? undefined : `token=${token}`;
+      } catch {
+        return undefined;
+      }
+    },
+  };
+}
 
 /** `$DSH_HOME`, else `~/.dsh` (same precedence as `@deepseek-ai/dsh-home-paths`). */
 export function resolveDshHome(env: NodeJS.ProcessEnv = process.env): string {
@@ -56,6 +80,7 @@ export function startRemote(ctx: DshContext, config: PluginConfig, runtime: RcRu
         receiptsStore: new JsonFileStore<ReceiptsDocument>(join(dir, 'receipts.json')),
         audit,
         iroh: { relays: config.relays },
+        web: dshWeb(ctx),
         hostName: config.hostName,
         grantTtlMs: config.grantTtlDays * 86_400_000,
         remoteApprovalTimeoutMs: config.remoteApprovalTimeoutSec * 1000,

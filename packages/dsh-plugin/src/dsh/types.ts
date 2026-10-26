@@ -86,6 +86,14 @@ export interface DshContext {
   readonly connection: {
     createPeer(options: { principal: unknown; interactions?: 'answer' | 'none' }): DshPeer;
     readonly fetch: { register(route: DshFetchRoute): () => Promise<void> };
+    /** `baseUrl` plus `?token=<launch token>`: DSH's own owner login for a browser. */
+    authenticatedUrl(baseUrl: string): string;
+  };
+  /** DSH Web's listener (`@deepseek-ai/dsh-host-webserver`). */
+  readonly webServer: {
+    readonly port: number | undefined;
+    readonly host: string | undefined;
+    readonly protocol: 'http:' | 'https:';
   };
   readonly remoteAccess: {
     registerPolicy(kind: string, policy: { bindings(principal: { deviceId?: unknown }): readonly DshRemoteAccessBinding[] }): () => void;

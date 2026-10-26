@@ -1,4 +1,5 @@
 import { Duplex } from 'node:stream';
+import { WEB_ALPN } from '@dsh-remote/protocol';
 import iroh from '@number0/iroh';
 import type { BiStream, Connection, Endpoint as IrohEndpoint, Incoming } from '@number0/iroh';
 import type { PeerIdentity } from '../core/peer.ts';
@@ -8,6 +9,7 @@ const { Endpoint, EndpointAddr, EndpointId, EndpointTicket, RelayMode } = iroh;
 /** ALPN of the DSH Remote API over iroh: one HTTP/1.1 connection per bi-stream. */
 export const ALPN = 'dsh-remote/1';
 const ALPN_BYTES = Array.from(Buffer.from(ALPN, 'utf8'));
+const WEB_ALPN_BYTES = Array.from(Buffer.from(WEB_ALPN, 'utf8'));
 const READ_CHUNK = 64 * 1024;
 const HANDSHAKE_TIMEOUT_MS = 10_000;
 
@@ -30,8 +32,14 @@ export interface IrohTransportOptions {
   /** `host:port` to bind; tests use `127.0.0.1:0`. */
   readonly bindAddr?: string;
   readonly limits?: Partial<TransportLimits>;
-  /** Called with every accepted bi-stream and the peer QUIC authenticated. */
+  /** Called with every accepted API bi-stream and the peer QUIC authenticated. */
   onStream(stream: Duplex, peer: PeerIdentity): void;
+  /**
+   * The DSH Web tunnel (`dsh-remote/web/1`): `allowWeb` gates each connection
+   * and stream, `onWebStream` serves the streams it allows. Absent: web
+   * connections are refused.
+   */
+  readonly web?: { allowWeb(peer: PeerIdentity): boolean; onWebStream(stream: Duplex, peer: PeerIdentity): void };
 }
 
 export interface TransportStatus {
@@ -69,7 +77,7 @@ export class IrohTransport {
     const builder = Endpoint.builder();
     builder.applyMinimal();
     builder.secretKey(options.secretKey);
-    builder.alpns([ALPN_BYTES]);
+    builder.alpns(options.web === undefined ? [ALPN_BYTES] : [ALPN_BYTES, WEB_ALPN_BYTES]);
     builder.relayMode(options.relays.length === 0 ? RelayMode.disabled() : RelayMode.customFromUrls([...options.relays]));
     if (options.bindAddr !== undefined) builder.bindAddr(options.bindAddr);
     const transport = new IrohTransport(await builder.bind(), options);
@@ -130,9 +138,14 @@ export class IrohTransport {
   }
 
   private async serve(incoming: Incoming): Promise<void> {
-    // Only our ALPN is advertised, so a handshake for anything else fails here.
+    // Only our ALPNs are advertised, so a handshake for anything else fails here.
     const connection = await withTimeout((await incoming.accept()).connect(), HANDSHAKE_TIMEOUT_MS);
     const peerId = connection.remoteId().toString();
+    const web = Buffer.from(connection.alpn()).toString('utf8') === WEB_ALPN ? this.options.web : undefined;
+    if (web !== undefined && !web.allowWeb({ peerId })) {
+      connection.close(3n, Array.from(Buffer.from('web window closed', 'utf8')));
+      return;
+    }
     if ([...this.live].filter((live) => live.peerId === peerId).length >= this.limits.maxConnectionsPerPeer) {
       connection.close(2n, Array.from(Buffer.from('too many connections', 'utf8')));
       return;
@@ -146,7 +159,8 @@ export class IrohTransport {
         const stream = new PeerStream(await connection.acceptBi());
         live.streams.add(stream);
         stream.once('close', () => live.streams.delete(stream));
-        this.options.onStream(stream, peer);
+        if (web !== undefined) web.onWebStream(stream, peer);
+        else this.options.onStream(stream, peer);
       }
     } catch {
       // The connection closed or was lost.
