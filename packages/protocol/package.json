@@ -9,6 +9,16 @@
       "source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./push": {
+      "source": "./src/push.ts",
+      "types": "./dist/push.d.ts",
+      "default": "./dist/push.js"
+    },
+    "./errors": {
+      "source": "./src/errors.ts",
+      "types": "./dist/errors.d.ts",
+      "default": "./dist/errors.js"
     }
   },
   "scripts": {
