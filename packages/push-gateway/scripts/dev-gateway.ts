@@ -36,11 +36,23 @@ class LoggingSender implements Sender {
   close(): void {}
 }
 
+/** Log every real delivery and what the platform answered. */
+function logged(platform: PushPlatform, sender: Sender): Sender {
+  return {
+    async send(push) {
+      const outcome = await sender.send(push);
+      console.log(`[${platform}] ${push.urgency} push to token ${push.token.slice(0, 8)}… (${push.env ?? 'fcm'}): ${outcome.ok ? 'accepted' : `${outcome.reason}${outcome.gone ? ', token gone' : ''}`}`);
+      return outcome;
+    },
+    close: () => sender.close(),
+  };
+}
+
 const senders: Partial<Record<PushPlatform, Sender>> = {
   apns: env.APNS_KEY_FILE && env.APNS_KEY_ID && env.APNS_TEAM_ID
-    ? new ApnsSender({ key: readFileSync(env.APNS_KEY_FILE, 'utf8'), keyId: env.APNS_KEY_ID, teamId: env.APNS_TEAM_ID, topic: env.APNS_TOPIC ?? 'dev.dshremote.dshRemote' })
+    ? logged('apns', new ApnsSender({ key: readFileSync(env.APNS_KEY_FILE, 'utf8'), keyId: env.APNS_KEY_ID, teamId: env.APNS_TEAM_ID, topic: env.APNS_TOPIC ?? 'dev.dshremote.dshRemote' }))
     : new LoggingSender('apns'),
-  fcm: env.FCM_SERVICE_ACCOUNT_FILE ? new FcmSender({ serviceAccount: parseServiceAccount(readFileSync(env.FCM_SERVICE_ACCOUNT_FILE, 'utf8')) }) : new LoggingSender('fcm'),
+  fcm: env.FCM_SERVICE_ACCOUNT_FILE ? logged('fcm', new FcmSender({ serviceAccount: parseServiceAccount(readFileSync(env.FCM_SERVICE_ACCOUNT_FILE, 'utf8')) })) : new LoggingSender('fcm'),
 };
 const store = HandleStore.open(join(state, 'handles.db'));
 const gateway = new Gateway({ store, senders });

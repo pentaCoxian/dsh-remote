@@ -24,7 +24,11 @@ function plan(body) {
   if ((body.tools?.length ?? 0) > 0 && prompt.includes(TOOL_TRIGGER)) {
     return { tool: { id: `call_${Date.now()}`, name: 'glob', arguments: JSON.stringify({ pattern: '*.md' }) } };
   }
-  if (prompt.split('\n').at(-1)?.includes(SLOW_TRIGGER)) return { text: 'Done after a long think.\nThe rest of the reply.', delayMs: SLOW_MS };
+  // This turn's user messages: DSH adds its own context messages after the prompt.
+  const lastReply = messages.findLastIndex((m) => m.role === 'assistant');
+  if (messages.slice(lastReply + 1).some((m) => m.role === 'user' && textOf(m).includes(SLOW_TRIGGER))) {
+    return { text: 'Done after a long think.\nThe rest of the reply.', delayMs: SLOW_MS };
+  }
   return { text: 'Scripted reply.' };
 }
 
