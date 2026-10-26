@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../core/errors.dart';
+import '../../push/push_registration.dart';
 import '../../state/link.dart';
 import '../../state/providers.dart';
 import '../../transport/iroh_pipe.dart';
@@ -90,6 +91,8 @@ class _WebScreenState extends ConsumerState<WebScreen> {
         await controller.loadRequest(Uri.parse('http://127.0.0.1:$port/?${web.tokenQuery}'));
       }
       unawaited(refreshTicket(ref, _hostId));
+      // Keep this host able to notify the phone (asks for the OS permission the first time).
+      unawaited(ref.read(pushRegistrarProvider).sync(session, ask: true).then((_) {}, onError: (_) {}));
     } on ApiException catch (error) {
       if (error.deviceGone) {
         _link(LinkState.revoked);

@@ -11,6 +11,7 @@ import '../../transport/iroh_pipe.dart';
 import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
 import '../../widgets/status.dart';
+import 'notifications_group.dart';
 
 /// Checks the host for real (redialing if the connection dropped) and keeps the
 /// host's dot in step: the screen never shows a state it has not just observed.
@@ -95,6 +96,7 @@ class SettingsScreen extends ConsumerWidget {
           if (homeRelay != null) InfoRow(icon: const Icon(LucideIcons.radioTower), label: 'This phone’s relay', value: Uri.parse(homeRelay).host),
           const InfoRow(icon: Icon(LucideIcons.shieldCheck), label: 'End-to-end encrypted', value: 'QUIC with TLS 1.3, authenticated by the host’s key. Relays forward encrypted packets only.'),
         ]),
+        if (!host.revoked) ...[const SectionLabel('Notifications'), NotificationsGroup(hostId: hostId)],
         const SectionLabel('Host'),
         Group(children: [
           InfoRow(

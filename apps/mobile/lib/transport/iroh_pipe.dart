@@ -74,6 +74,10 @@ abstract interface class IrohPipe {
   /// Dial the host a ticket names and serve it on [socketPath]. Opening an open host refreshes its address.
   Future<PipeHandle> open(String ticket, String socketPath);
 
+  /// Dial the push gateway [ticket] names and serve it on [socketPath], on the
+  /// gateway's own ALPN. Closed and inspected by its id, like a host.
+  Future<PipeHandle> openGateway(String ticket, String socketPath);
+
   Future<void> close(String hostId);
 
   /// Serve the host's DSH Web tunnel on a 127.0.0.1 port ([preferredPort] when free); the host must be open.
@@ -122,8 +126,8 @@ Map<String, dynamic> _invoke(String name, List<Object> args) {
         final key = args[0] as List<int>;
         final bytes = arena<Uint8>(key.length)..asTypedList(key.length).setAll(0, key);
         reply = lib.lookupFunction<_StartC, _StartD>('dshr_start')(bytes, key.length, text(args[1]));
-      case 'open':
-        reply = lib.lookupFunction<_TwoC, _TwoC>('dshr_open')(text(args[0]), text(args[1]));
+      case 'open' || 'open_gateway':
+        reply = lib.lookupFunction<_TwoC, _TwoC>('dshr_$name')(text(args[0]), text(args[1]));
       case 'open_web':
         reply = lib.lookupFunction<_WebC, _WebD>('dshr_open_web')(text(args[0]), args[1] as int);
       case 'close' || 'close_web' || 'status' || 'ticket_info':
@@ -156,6 +160,12 @@ class NativeIrohPipe implements IrohPipe {
   @override
   Future<PipeHandle> open(String ticket, String socketPath) async {
     final reply = await _call('open', [ticket, socketPath]);
+    return PipeHandle(hostId: reply['hostId'] as String, socketPath: reply['socketPath'] as String);
+  }
+
+  @override
+  Future<PipeHandle> openGateway(String ticket, String socketPath) async {
+    final reply = await _call('open_gateway', [ticket, socketPath]);
     return PipeHandle(hostId: reply['hostId'] as String, socketPath: reply['socketPath'] as String);
   }
 

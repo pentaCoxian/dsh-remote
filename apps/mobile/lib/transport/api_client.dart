@@ -95,6 +95,19 @@ class HostApi {
     return (tokenQuery: json['tokenQuery'] as String, expiresAt: DateTime.fromMillisecondsSinceEpoch(json['expiresAt'] as int));
   }
 
+  // Notifications: the phone tells the host where and how to reach it.
+
+  Future<PushStatus> pushStatus() async => PushStatus.fromJson(await request('GET', '/v1/push') as Json);
+
+  /// [gateway] is the gateway's EndpointId, [key] the base64url 32-byte key only this phone and the host hold.
+  Future<PushStatus> registerPush({required String gateway, required String handle, required String key, required String platform, required PushEvents events}) async =>
+      PushStatus.fromJson(await request('PUT', '/v1/push', body: {'gateway': gateway, 'handle': handle, 'key': key, 'platform': platform, 'events': events.toJson()}) as Json);
+
+  Future<PushStatus> unregisterPush() async => PushStatus.fromJson(await request('DELETE', '/v1/push') as Json);
+
+  /// Ask the host to send a test notification through its gateway.
+  Future<void> testPush() => request('POST', '/v1/push/test');
+
   // Pairing: signed with the new key and device id `pending`.
 
   Future<Json> redeem({required String challengeId, required String publicKey, required String label, required String platform, required bool hardwareBacked}) async =>

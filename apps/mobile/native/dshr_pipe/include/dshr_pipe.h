@@ -15,6 +15,8 @@
 char *dshr_start(const uint8_t *secret_key, size_t secret_len, const char *relays_json);
 /* Dial the host a ticket names and serve it on a Unix socket. -> {hostId, socketPath} */
 char *dshr_open(const char *ticket, const char *socket_path);
+/* The push gateway, served like a host on its own ALPN (dsh-remote/push/1). */
+char *dshr_open_gateway(const char *ticket, const char *socket_path);
 /* Stop serving a host (hex EndpointId). -> {closed} */
 char *dshr_close(const char *host_id);
 /* Serve the host's DSH Web tunnel on 127.0.0.1 (preferred_port when free). -> {port} */

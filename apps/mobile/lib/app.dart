@@ -14,11 +14,18 @@ import 'features/web/web_screen.dart';
 import 'state/providers.dart';
 import 'ui/theme.dart';
 
+final _hostLink = RegExp(r'^[0-9a-f]{64}$');
+
 final _router = GoRouter(
   // A pairing code opened from outside the app (dshremote://pair?v=2&…) arrives
-  // as a deep link; route it to the pairing screen with the whole code.
+  // as a deep link; route it to the pairing screen with the whole code. A tapped
+  // notification opens dshremote://host/<hostId>: that host's DSH Web.
   redirect: (_, state) {
     final uri = state.uri;
+    if (uri.scheme == 'dshremote' && uri.host == 'host') {
+      final id = uri.pathSegments.firstOrNull ?? '';
+      return _hostLink.hasMatch(id) ? '/host/$id' : '/';
+    }
     final external = uri.scheme == 'dshremote' || (uri.path == '/' && uri.queryParameters['v'] == '2' && uri.queryParameters.containsKey('t'));
     if (!external) return null;
     final code = Uri(scheme: 'dshremote', host: 'pair', queryParameters: uri.queryParameters).toString();

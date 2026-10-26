@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use dshr_pipe::{parse_ticket, ticket_info, Pipes, ALPN, WEB_ALPN};
+use dshr_pipe::{parse_ticket, ticket_info, Pipes, ALPN, PUSH_ALPN, WEB_ALPN};
 use iroh::endpoint::presets;
 use iroh::{Endpoint, RelayMode, SecretKey};
 use iroh_tickets::endpoint::EndpointTicket;
@@ -22,7 +22,7 @@ async fn echo_host() -> Endpoint {
 async fn echo_host_with(secret_key: SecretKey) -> Endpoint {
     let endpoint = Endpoint::builder(presets::Minimal)
         .secret_key(secret_key)
-        .alpns(vec![ALPN.to_vec(), WEB_ALPN.to_vec()])
+        .alpns(vec![ALPN.to_vec(), WEB_ALPN.to_vec(), PUSH_ALPN.to_vec()])
         .relay_mode(RelayMode::Disabled)
         .bind()
         .await
@@ -32,14 +32,16 @@ async fn echo_host_with(secret_key: SecretKey) -> Endpoint {
         while let Some(incoming) = server.accept().await {
             tokio::spawn(async move {
                 let Ok(connection) = incoming.await else { return };
-                // Web streams answer with a marker, so a test can tell which ALPN carried them.
-                let web = connection.alpn() == WEB_ALPN;
+                // Web and push streams answer with a marker, so a test can tell which ALPN carried them.
+                let marker: &[u8] = match connection.alpn() {
+                    a if a == WEB_ALPN => b"web:",
+                    a if a == PUSH_ALPN => b"push:",
+                    _ => b"",
+                };
                 while let Ok((mut send, mut recv)) = connection.accept_bi().await {
                     tokio::spawn(async move {
                         let buf = recv.read_to_end(64 * 1024).await.unwrap();
-                        if web {
-                            send.write_all(b"web:").await.unwrap();
-                        }
+                        send.write_all(marker).await.unwrap();
                         send.write_all(&buf.to_ascii_uppercase()).await.unwrap();
                         send.finish().unwrap();
                     });
@@ -104,6 +106,23 @@ async fn carries_socket_connections_over_bi_streams() {
     assert!(!path.exists());
     pipes.shutdown().await;
     host.close().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn serves_the_push_gateway_on_its_own_alpn() {
+    let gateway = echo_host().await;
+    let ticket = EndpointTicket::new(gateway.addr()).to_string();
+    let pipes = Pipes::start(SecretKey::generate().to_bytes(), &[]).await.unwrap();
+    let path = socket_path("gateway");
+    let opened = pipes.open_alpn(&ticket, &path, PUSH_ALPN).await.unwrap();
+    assert_eq!(opened["hostId"], gateway.id().to_string());
+    assert_eq!(round_trip(&path, "register").await, "push:REGISTER");
+    // Opening it again only refreshes the address; the ALPN stays.
+    pipes.open_alpn(&ticket, &path, PUSH_ALPN).await.unwrap();
+    assert_eq!(round_trip(&path, "again").await, "push:AGAIN");
+    assert!(pipes.close(gateway.id()).await);
+    pipes.shutdown().await;
+    gateway.close().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]

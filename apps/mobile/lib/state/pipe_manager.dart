@@ -46,8 +46,8 @@ class PipeManager {
   /// sandbox paths come close (devices) or go over (simulators). Past the limit
   /// the socket is named relative to [socketDir], made the working directory:
   /// both ends of the socket live in this process, so they resolve it alike.
-  String _path(String hostId) {
-    final name = 'h${hostId.substring(0, 8)}';
+  String _path(String hostId, {String prefix = 'h'}) {
+    final name = '$prefix${hostId.substring(0, 8)}';
     final absolute = '$socketDir/$name';
     if (utf8.encode(absolute).length < 100) return absolute;
     Directory.current = socketDir;
@@ -61,6 +61,12 @@ class PipeManager {
       });
 
   HostLink link(String hostId, String Function() ticket) => HostLink(() => socketFor(hostId, ticket));
+
+  /// A link to the push gateway [ticket] names (its id is [gatewayId]); close it with [close].
+  HostLink gatewayLink(String gatewayId, String ticket) => HostLink(() => _shared(() => _open[gatewayId], (f) => f == null ? _open.remove(gatewayId) : _open[gatewayId] = f, () async {
+        await start();
+        return (await pipe.openGateway(ticket, _path(gatewayId, prefix: 'g'))).socketPath;
+      }));
 
   /// The local port of [hostId]'s DSH Web tunnel, opening the host's pipe first if needed.
   /// The port is stable per host when free, so DSH Web's browser storage (per origin) survives restarts.

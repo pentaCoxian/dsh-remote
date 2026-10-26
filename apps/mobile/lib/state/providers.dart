@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../device_keys/device_keys.dart';
+import '../push/push_registration.dart';
 import '../storage/host_store.dart';
 import '../storage/secure_store.dart';
 import '../transport/iroh_pipe.dart';
@@ -45,6 +46,7 @@ class HostsController extends AsyncNotifier<List<PairedHost>> {
     if (host != null) {
       await ref.read(deviceKeysProvider).delete(host.keyAlias).catchError((_) {});
       await ref.read(pipeManagerProvider).close(hostId);
+      await ref.read(pushRegistrarProvider).forget(hostId).catchError((_) {});
     }
     await _save([for (final h in current) if (h.hostId != hostId) h]);
   }

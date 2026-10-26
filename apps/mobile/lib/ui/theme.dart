@@ -243,6 +243,13 @@ ThemeData buildTheme(Brightness brightness) {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.control)),
       elevation: 0,
     ),
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.disabled) ? t.background.withValues(alpha: 0.8) : t.background),
+      trackColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? (states.contains(WidgetState.disabled) ? t.textTertiary : t.text) : t.hover),
+      trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
+      thumbIcon: const WidgetStatePropertyAll(null),
+      splashRadius: 0,
+    ),
     progressIndicatorTheme: ProgressIndicatorThemeData(color: t.accent, linearTrackColor: Colors.transparent, circularTrackColor: Colors.transparent),
     textSelectionTheme: TextSelectionThemeData(cursorColor: t.accent, selectionColor: t.accent.withValues(alpha: 0.2), selectionHandleColor: t.accent),
     pageTransitionsTheme: const PageTransitionsTheme(builders: {

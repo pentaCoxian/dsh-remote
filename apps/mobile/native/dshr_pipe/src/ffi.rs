@@ -12,7 +12,7 @@ use iroh::EndpointId;
 use serde_json::{json, Value};
 use tokio::runtime::Runtime;
 
-use crate::{ticket_info, Pipes, Result};
+use crate::{ticket_info, Pipes, Result, PUSH_ALPN};
 
 fn runtime() -> &'static Runtime {
     static RUNTIME: OnceLock<Runtime> = OnceLock::new();
@@ -93,6 +93,21 @@ pub unsafe extern "C" fn dshr_open(ticket: *const c_char, socket_path: *const c_
         let socket_path = unsafe { string(socket_path, "socket path") }?;
         let pipes = current()?;
         runtime().block_on(pipes.open(&ticket, Path::new(&socket_path)))
+    })
+}
+
+/// Dial the push gateway named by `ticket` and serve it on the Unix socket `socket_path`.
+/// It is then closed, and its status read, like a host (by its EndpointId).
+///
+/// # Safety
+/// Both arguments must be valid C strings.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dshr_open_gateway(ticket: *const c_char, socket_path: *const c_char) -> *mut c_char {
+    respond(|| {
+        let ticket = unsafe { string(ticket, "ticket") }?;
+        let socket_path = unsafe { string(socket_path, "socket path") }?;
+        let pipes = current()?;
+        runtime().block_on(pipes.open_alpn(&ticket, Path::new(&socket_path), PUSH_ALPN))
     })
 }
 

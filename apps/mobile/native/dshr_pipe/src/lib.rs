@@ -29,6 +29,8 @@ pub mod ffi;
 pub const ALPN: &[u8] = b"dsh-remote/1";
 /// ALPN of the DSH Web tunnel: each bi-stream is one connection to DSH Web on the host.
 pub const WEB_ALPN: &[u8] = b"dsh-remote/web/1";
+/// ALPN of the push gateway, which the app reaches like a host: HTTP/1.1 per bi-stream.
+pub const PUSH_ALPN: &[u8] = b"dsh-remote/push/1";
 const DIAL_TIMEOUT: Duration = Duration::from_secs(15);
 /// How long the host may keep answering after the app closed its side of a socket.
 const DRAIN_TIMEOUT: Duration = Duration::from_secs(30);
@@ -136,6 +138,11 @@ impl Pipes {
     /// unreachable host fails here. Opening a host that already has a pipe only
     /// refreshes its address (e.g. a newer ticket from `/v1/host/address`).
     pub async fn open(&self, ticket: &str, socket_path: &Path) -> Result<Value> {
+        self.open_alpn(ticket, socket_path, ALPN).await
+    }
+
+    /// `open` for another kind of peer: the push gateway speaks `PUSH_ALPN`.
+    pub async fn open_alpn(&self, ticket: &str, socket_path: &Path, alpn: &'static [u8]) -> Result<Value> {
         let addr = parse_ticket(ticket)?;
         let host = addr.id;
         let mut pipes = self.pipes.lock().await;
@@ -147,7 +154,7 @@ impl Pipes {
             pipe.link.connection().await?;
             return Ok(json!({ "hostId": host.to_string(), "socketPath": pipe.socket_path }));
         }
-        let link = Arc::new(Link { endpoint: self.endpoint.clone(), alpn: ALPN, addr: std::sync::Mutex::new(addr), connection: Mutex::new(None) });
+        let link = Arc::new(Link { endpoint: self.endpoint.clone(), alpn, addr: std::sync::Mutex::new(addr), connection: Mutex::new(None) });
         link.connection().await?;
         let _ = tokio::fs::remove_file(socket_path).await;
         let listener = UnixListener::bind(socket_path).map_err(|e| format!("cannot listen on {}: {e}", socket_path.display()))?;
