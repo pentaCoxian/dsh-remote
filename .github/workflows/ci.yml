@@ -31,6 +31,7 @@ jobs:
           pnpm --filter @dsh-remote/dsh-plugin pack:release
           pnpm --filter @dsh-remote/push-gateway pack:release
       - name: Install the plugin tarball into DSH and run it
+        timeout-minutes: 10
         run: pnpm --filter @dsh-remote/dsh-plugin smoke:release "$PWD/packages/dsh-plugin/release/dsh-remote-dsh-plugin-$(node -p "require('./packages/dsh-plugin/package.json').version").tgz"
       - uses: actions/upload-artifact@v7
         with:

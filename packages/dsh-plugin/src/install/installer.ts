@@ -56,9 +56,11 @@ export async function install(options: InstallOptions = {}): Promise<InstallResu
 
   const [command = 'dsh', ...prefix] = options.dsh ?? ['dsh'];
   log(`adding DSH Remote ${plugin.version} and ${MOBILE_UI.name} to the ${profile} profile`);
-  const add = spawnSync(command, [...prefix, 'plugin', '--profile', profile, 'add', plugin.file, mobileUi], { env: { ...process.env, DSH_HOME: home }, encoding: 'utf8' });
+  // pnpm's progress goes straight to this terminal. No pipes: a process pnpm leaves
+  // behind holding one open would keep spawnSync waiting after DSH has exited.
+  const add = spawnSync(command, [...prefix, 'plugin', '--profile', profile, 'add', plugin.file, mobileUi], { env: { ...process.env, DSH_HOME: home }, stdio: ['ignore', 'inherit', 'inherit'] });
   if (add.error !== undefined) throw new Error(`cannot run ${command}: ${add.error.message} (is DSH installed? npm i -g @deepseek-ai/dsh)`);
-  if (add.status !== 0) throw new Error(`dsh plugin add failed:\n${(add.stderr || add.stdout).trim()}`);
+  if (add.status !== 0) throw new Error(`dsh plugin add failed (${add.status ?? add.signal}); its output is above`);
   return { version: plugin.version, files: [plugin.file, mobileUi], repaired };
 }
 

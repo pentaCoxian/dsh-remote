@@ -5,7 +5,7 @@
 // and its DSH Web client module.
 //   node --conditions=source scripts/smoke-release.ts release/dsh-remote-dsh-plugin-<version>.tgz
 import { spawn, spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -27,18 +27,33 @@ const bin = join(home, 'bin');
 mkdirSync(bin);
 writeFileSync(join(bin, 'dsh'), `#!/bin/sh\nexec "${process.execPath}" "${dshBin}" "$@"\n`, { mode: 0o755 });
 const env = { ...process.env, DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1', PATH: `${bin}:${process.env.PATH ?? ''}` };
+const started = Date.now();
 const check = (ok: boolean, what: string) => {
-  console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`);
+  console.log(`${ok ? 'ok  ' : 'FAIL'} ${what} [${((Date.now() - started) / 1000).toFixed(1)}s]`);
   if (!ok) process.exitCode = 1;
 };
+// Nothing here may wait forever: each child process and request has its own limit,
+// and this catches whatever else hangs, with the tail of dsh web's log.
+let log = '';
+const watchdog = setTimeout(() => {
+  console.log(`FAIL still running after 8 minutes; dsh web log:\n${log.slice(-3000)}`);
+  process.exit(1);
+}, 8 * 60_000);
 
 const profile = join(home, 'profiles', 'web');
 const dependencies = () => (JSON.parse(readFileSync(join(profile, 'package.json'), 'utf8')) as { dependencies: Record<string, string> }).dependencies;
+let runs = 0;
 const runInstaller = (what: string) => {
-  const run = spawnSync(process.execPath, [installer, '--from', releaseDir], { env, encoding: 'utf8' });
-  check(run.status === 0, what);
-  if (run.status !== 0) throw new Error(`${run.stdout}\n${run.stderr}`);
-  return run.stdout;
+  // Output to a file, not a pipe: spawnSync would otherwise wait for every process
+  // holding the pipe, so a stray pnpm child could outlive the timeout.
+  const output = join(home, `install-${(runs += 1)}.log`);
+  const fd = openSync(output, 'w');
+  const run = spawnSync(process.execPath, [installer, '--from', releaseDir], { env, stdio: ['ignore', fd, fd], timeout: 180_000, killSignal: 'SIGKILL' });
+  closeSync(fd);
+  const text = readFileSync(output, 'utf8');
+  check(run.status === 0, `${what}${run.error === undefined ? '' : ` (${run.error.message})`}`);
+  if (run.status !== 0) throw new Error(`install.mjs output:\n${text.slice(-4000)}`);
+  return text;
 };
 
 runInstaller('install.mjs installs into a fresh DSH home');
@@ -61,7 +76,6 @@ const port = await new Promise<number>((done) => {
 });
 const overlay = join(home, 'smoke.patch.yml');
 writeFileSync(overlay, '- id: dsh-remote\n  config:\n    hostName: Smoke\n    relays: []\n    pushGateway: null\n');
-let log = '';
 const dsh = spawn(process.execPath, [dshBin, 'web', '--patch', overlay, '--host', '127.0.0.1', '--port', String(port), '--no-open'], { env, cwd: home, stdio: ['ignore', 'pipe', 'pipe'] });
 dsh.stdout!.on('data', (chunk) => (log += chunk));
 dsh.stderr!.on('data', (chunk) => (log += chunk));
@@ -85,19 +99,28 @@ try {
   check(offer.url.startsWith('dshremote://pair?v=2&'), 'pairing code offered');
   admin.close();
   const cli = join(profile, 'node_modules', '@dsh-remote', 'dsh-plugin', 'dist', 'cli.js');
-  const devices = spawnSync(process.execPath, [cli, 'devices'], { env, encoding: 'utf8' });
+  const devices = spawnSync(process.execPath, [cli, 'devices'], { env, encoding: 'utf8', timeout: 30_000 });
   check(devices.status === 0, `bundled dsh-remote CLI answers (${devices.stdout.trim().split('\n')[0] ?? ''})`);
 
   // DSH Web, logged in as its owner, loads the plugin's client module (the /rc pairing dialog).
   const login = /https?:\/\/127\.0\.0\.1:\d+\/\?token=[\w-]+/.exec(log)?.[0];
-  const cookie = login === undefined ? undefined : (await fetch(login, { redirect: 'manual' })).headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
-  const page = cookie === undefined ? '' : await (await fetch(`http://127.0.0.1:${port}/`, { headers: { cookie } })).text();
+  const get = (url: string, headers: Record<string, string> = {}) => fetch(url, { headers, redirect: 'manual', signal: AbortSignal.timeout(30_000) });
+  const cookie = login === undefined ? undefined : (await get(login)).headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+  const page = cookie === undefined ? '' : await (await get(`http://127.0.0.1:${port}/`, { cookie })).text();
   // The page's module table: {"id":"@dsh-remote/dsh-plugin","url":"plugins/??@dsh-remote/dsh-plugin/client.js&rev=…",…}
   const module = /"id":"@dsh-remote\/dsh-plugin","url":"([^"]+)"/.exec(page)?.[1];
-  const client = module === undefined || cookie === undefined ? '' : await (await fetch(`http://127.0.0.1:${port}/${module}`, { headers: { cookie } })).text();
+  const client = module === undefined || cookie === undefined ? '' : await (await get(`http://127.0.0.1:${port}/${module}`, { cookie })).text();
   check(client.includes('dsh-remote-dialog'), `DSH Web serves the /rc pairing dialog module (${module === undefined ? `not in the ${page.length} B page` : `${client.length} B`})`);
+} catch (error) {
+  console.log(`FAIL ${error instanceof Error ? error.message : String(error)}`);
+  process.exitCode = 1;
 } finally {
+  // DSH gets a moment to shut down cleanly; its open pipes must not keep this script alive.
+  const exited = dsh.exitCode !== null || dsh.signalCode !== null ? Promise.resolve() : new Promise((done) => dsh.once('exit', done));
   dsh.kill('SIGTERM');
-  await new Promise((done) => setTimeout(done, 500));
+  await Promise.race([exited, new Promise((done) => setTimeout(done, 10_000))]);
+  dsh.kill('SIGKILL');
   rmSync(home, { recursive: true, force: true });
+  clearTimeout(watchdog);
+  process.exit();
 }
