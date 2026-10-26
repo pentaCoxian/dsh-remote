@@ -6,7 +6,7 @@
 use std::ffi::{c_char, CStr, CString};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 
 use iroh::EndpointId;
 use serde_json::{json, Value};
@@ -26,8 +26,14 @@ fn pipes() -> &'static Mutex<Option<Arc<Pipes>>> {
     PIPES.get_or_init(|| Mutex::new(None))
 }
 
+/// The slot, even after a panic elsewhere held its lock: the panic already came
+/// back as an error, and the slot itself is always whole.
+fn slot() -> MutexGuard<'static, Option<Arc<Pipes>>> {
+    pipes().lock().unwrap_or_else(PoisonError::into_inner)
+}
+
 fn current() -> Result<Arc<Pipes>> {
-    pipes().lock().expect("pipes lock").clone().ok_or_else(|| "the transport is not started".to_string())
+    slot().clone().ok_or_else(|| "the transport is not started".to_string())
 }
 
 fn respond(body: impl FnOnce() -> Result<Value>) -> *mut c_char {
@@ -71,7 +77,7 @@ pub unsafe extern "C" fn dshr_start(secret_key: *const u8, secret_len: usize, re
         }
         let key: [u8; 32] = unsafe { std::slice::from_raw_parts(secret_key, 32) }.try_into().expect("32 bytes");
         let relays: Vec<String> = serde_json::from_str(&unsafe { string(relays_json, "relays") }?).map_err(|_| "relays must be a JSON array of URLs".to_string())?;
-        let mut slot = pipes().lock().expect("pipes lock");
+        let mut slot = slot();
         if let Some(running) = slot.as_ref() {
             return Ok(json!({ "endpointId": running.endpoint_id().to_string() }));
         }
@@ -182,16 +188,22 @@ pub extern "C" fn dshr_network_changed() -> *mut c_char {
 }
 
 /// Close every pipe and the endpoint (the app going to the background).
+///
+/// The lock is held until the endpoint is down, so a start that follows (the app
+/// coming back) waits: two endpoints with the same key would fight over the relay
+/// and the host's connection. A graceful close gets [`SHUTDOWN_LIMIT`].
 #[unsafe(no_mangle)]
 pub extern "C" fn dshr_stop() -> *mut c_char {
     respond(|| {
-        let running = pipes().lock().expect("pipes lock").take();
-        if let Some(pipes) = running {
-            runtime().block_on(pipes.shutdown());
+        let mut slot = slot();
+        if let Some(pipes) = slot.take() {
+            let _ = runtime().block_on(async { tokio::time::timeout(SHUTDOWN_LIMIT, pipes.shutdown()).await });
         }
         Ok(json!({}))
     })
 }
+
+const SHUTDOWN_LIMIT: std::time::Duration = std::time::Duration::from_secs(3);
 
 /// # Safety
 /// `text` must come from one of the functions above and be freed once.

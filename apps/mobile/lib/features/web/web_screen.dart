@@ -63,7 +63,7 @@ class _WebScreenState extends ConsumerState<WebScreen> {
   void initState() {
     super.initState();
     // The app closes the tunnel when backgrounded (app.dart); reopen it on return.
-    _lifecycle = AppLifecycleListener(onResume: () => unawaited(_connect()));
+    _lifecycle = AppLifecycleListener(onHide: () => _signalPage(online: false), onResume: () => unawaited(_connect()));
     unawaited(_connect());
     // DSH Web shows its own reconnecting state; keep this app's dot honest too.
     _watch = Timer.periodic(const Duration(seconds: 10), (_) => unawaited(_checkLink()));
@@ -109,6 +109,9 @@ class _WebScreenState extends ConsumerState<WebScreen> {
           _loading = true;
         });
         await controller.loadRequest(Uri.parse('http://127.0.0.1:$port/?${web.tokenQuery}'));
+      } else {
+        // The same page, and the tunnel answers again: DSH Web reconnects now, not after its backoff.
+        _signalPage(online: true);
       }
       unawaited(refreshTicket(ref, _hostId));
       // Keep this host able to notify the phone (asks for the OS permission the first time).
@@ -131,6 +134,15 @@ class _WebScreenState extends ConsumerState<WebScreen> {
     } finally {
       _connecting = false;
     }
+  }
+
+  /// DSH Web's connection client stops retrying while the page is offline and
+  /// reconnects at once, with a fresh backoff, when it comes back online. The
+  /// tunnel closes in the background, so the page hears about it as the network.
+  void _signalPage({required bool online}) {
+    final controller = _controller;
+    if (controller == null) return;
+    unawaited(controller.runJavaScript("dispatchEvent(new Event('${online ? 'online' : 'offline'}'))").catchError((_) {}));
   }
 
   WebViewController _createController() {

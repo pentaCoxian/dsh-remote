@@ -29,10 +29,14 @@ class PipeManager {
   Future<String>? _started;
   final Map<String, Future<String>> _open = {};
 
+  /// The endpoint a pause is still closing: the next start waits for it.
+  Future<void>? _stopping;
+
   /// This phone's EndpointId, starting the endpoint on first use.
   Future<String> start() => _shared(() => _started, (f) => _started = f, _start);
 
   Future<String> _start() async {
+    await _stopping;
     var encoded = await store.read(_keyName);
     if (encoded == null) {
       final random = Random.secure();
@@ -110,12 +114,17 @@ class PipeManager {
   }
 
   /// The app is going to the background: close the endpoint (sockets die there
-  /// anyway). The next request starts it again and reopens its pipe.
+  /// anyway). The next request starts it again and reopens its pipe, once this
+  /// stop is done; a start still in flight finishes first, so it is stopped too.
   Future<void> pause() async {
     final started = _started;
     _started = null;
     _open.clear();
-    if (started != null) await pipe.stop().catchError((_) {});
+    if (started == null) return;
+    final stopping = started.then((_) {}, onError: (_) {}).then((_) => pipe.stop()).catchError((_) {});
+    _stopping = stopping;
+    await stopping;
+    if (identical(_stopping, stopping)) _stopping = null;
   }
 
   Future<void> networkChanged() async {
