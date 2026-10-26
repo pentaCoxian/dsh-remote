@@ -1,51 +1,25 @@
-import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { isValid, WEB_ALPN } from '@dsh-remote/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { startFakeDshWeb, type FakeDshWeb } from './helpers/fake-dsh-web.ts';
 import { dialTicket, type IrohDialer } from './helpers/iroh.ts';
 import { startLiveHost, type LiveHost } from './helpers/live.ts';
 import { send, TestPhone } from './helpers/phone.ts';
 
 const TOKEN = 'launch-token-0123456789abcdef';
 
-/**
- * Stands in for DSH Web with its two gates (docs/dsh-adapter-findings.md A1):
- * the Host fence (loopback authorities on any port; Origin, when sent, must be
- * the same authority) and the launch-token → cookie exchange.
- */
-function fakeDshWeb(): { server: Server; hosts: string[] } {
-  const hosts: string[] = [];
-  const fenced = (req: IncomingMessage) => {
-    const host = req.headers.host ?? '';
-    const origin = req.headers.origin;
-    return /^127\.0\.0\.1(:\d+)?$/.test(host) && (origin === undefined || origin === `http://${host}`);
-  };
-  const server = createServer((req, res) => {
-    hosts.push(req.headers.host ?? '');
-    if (!fenced(req)) return void res.writeHead(403).end('forbidden');
-    const url = new URL(req.url ?? '/', 'http://x');
-    if (url.searchParams.get('token') === TOKEN) return void res.writeHead(303, { location: './', 'set-cookie': `dsh-auth-test=owner; HttpOnly; SameSite=Strict; Path=/` }).end();
-    if (req.headers.cookie !== 'dsh-auth-test=owner') return void res.writeHead(401).end('unauthorized');
-    res.writeHead(200, { 'content-type': 'text/html' }).end(`<title>DeepSeek Harness</title>${url.pathname}`);
-  });
-  return { server, hosts };
-}
-
 describe('the DSH Web tunnel', () => {
   let live: LiveHost;
-  let web: ReturnType<typeof fakeDshWeb>;
-  let webPort: number;
+  let web: FakeDshWeb;
   const dialers: IrohDialer[] = [];
 
   beforeEach(async () => {
-    web = fakeDshWeb();
-    await new Promise<void>((resolve) => web.server.listen(0, '127.0.0.1', resolve));
-    webPort = (web.server.address() as { port: number }).port;
-    live = await startLiveHost({ iroh: true, web: { target: () => ({ host: '127.0.0.1', port: webPort }), launchTokenQuery: () => `token=${TOKEN}` } });
+    web = await startFakeDshWeb(TOKEN);
+    live = await startLiveHost({ iroh: true, web: { target: () => ({ host: '127.0.0.1', port: web.port }), launchTokenQuery: () => `token=${TOKEN}` } });
   });
   afterEach(async () => {
     for (const dialer of dialers.splice(0)) await dialer.close();
     await live.close();
-    await new Promise((resolve) => web.server.close(resolve));
+    await web.close();
   });
 
   const dial = async (alpn?: string, secretKey?: number[]) => {

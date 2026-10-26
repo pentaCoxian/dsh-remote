@@ -58,6 +58,7 @@ class SettingsScreen extends ConsumerWidget {
                 trailing: IconButton(tooltip: 'Refresh', icon: const Icon(Icons.refresh), onPressed: () => ref.invalidate(_pipeStatusProvider(hostId))),
               ),
               if (status.homeRelay != null) ListTile(leading: const Icon(Icons.hub_outlined), title: const Text('This phone’s relay'), subtitle: Text(Uri.parse(status.homeRelay!).host)),
+              if (status.webPort != null) ListTile(leading: const Icon(Icons.web), title: const Text('DSH Web tunnel'), subtitle: Text('Open on this phone at 127.0.0.1:${status.webPort}')),
             ]);
           },
         ),

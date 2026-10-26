@@ -17,7 +17,8 @@ String _segment(String id) {
   return id;
 }
 
-/// Signed REST client for one paired host (spec §6), over the host's iroh pipe.
+/// Signed REST client for one paired host over its iroh pipe: pairing, host
+/// facts, and opening the DSH Web tunnel. DSH itself runs in the WebView.
 class HostApi {
   HostApi({required this.link, required this.signer})
       : _dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 20), sendTimeout: const Duration(seconds: 15), receiveTimeout: const Duration(seconds: 20)))
@@ -88,29 +89,11 @@ class HostApi {
     return (ticket: json['ticket'] as String, relayUrl: json['relayUrl'] as String?);
   }
 
-  Future<List<Workspace>> workspaces() async => [for (final item in ((await request('GET', '/v1/workspaces')) as Json)['items'] as List) Workspace.fromJson(item as Json)];
-
-  Future<List<SessionSummary>> sessions() async => [for (final item in ((await request('GET', '/v1/sessions')) as Json)['items'] as List) SessionSummary.fromJson(item as Json)];
-
-  Future<SessionSnapshot> snapshot(String sessionId) async => SessionSnapshot.fromJson(await request('GET', '/v1/sessions/${_segment(sessionId)}') as Json);
-
-  Future<PromptReceipt> sendPrompt(String sessionId, String clientRequestId, String text) async =>
-      PromptReceipt.fromJson(await request('POST', '/v1/sessions/${_segment(sessionId)}/prompts', body: {'clientRequestId': clientRequestId, 'text': text}) as Json);
-
-  Future<PromptReceipt> receipt(String sessionId, String clientRequestId) async =>
-      PromptReceipt.fromJson(await request('GET', '/v1/sessions/${_segment(sessionId)}/prompts/${_segment(clientRequestId)}') as Json);
-
-  Future<void> cancel(String sessionId, String turnId) => request('POST', '/v1/sessions/${_segment(sessionId)}/cancel', body: {'turnId': turnId});
-
-  Future<List<Approval>> approvals() async => [for (final item in ((await request('GET', '/v1/approvals')) as Json)['items'] as List) Approval.fromJson(item as Json)];
-
-  Future<Approval> respond(String approvalId, {required bool allow, required int expectedRevision}) async => Approval.fromJson(
-      await request('POST', '/v1/approvals/${_segment(approvalId)}/responses', body: {'decision': allow ? 'allow_once' : 'deny', 'expectedRevision': expectedRevision}) as Json);
-
-  Future<Controller?> acquireLease(String sessionId, {bool takeover = false}) async =>
-      Controller.fromJson(((await request('POST', '/v1/sessions/${_segment(sessionId)}/control-lease', body: {'takeover': takeover})) as Json)['holder']);
-
-  Future<void> releaseLease(String sessionId) => request('DELETE', '/v1/sessions/${_segment(sessionId)}/control-lease');
+  /// Open this phone's DSH Web window (signed by the hardware key); returns DSH's launch-token query.
+  Future<({String tokenQuery, DateTime expiresAt})> webSession() async {
+    final json = await request('POST', '/v1/web/session') as Json;
+    return (tokenQuery: json['tokenQuery'] as String, expiresAt: DateTime.fromMillisecondsSinceEpoch(json['expiresAt'] as int));
+  }
 
   // Pairing: signed with the new key and device id `pending`.
 

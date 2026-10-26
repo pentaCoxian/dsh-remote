@@ -32,10 +32,13 @@ class PipePath {
 
 /// Connection details for the connection sheet.
 class PipeStatus {
-  const PipeStatus({required this.connected, required this.paths, this.remoteId, this.homeRelay});
+  const PipeStatus({required this.connected, required this.paths, this.remoteId, this.homeRelay, this.webPort});
   final bool connected;
   final List<PipePath> paths;
   final String? remoteId;
+
+  /// The DSH Web tunnel's local port while it is open.
+  final int? webPort;
 
   /// This phone's own home relay.
   final String? homeRelay;
@@ -46,6 +49,7 @@ class PipeStatus {
         connected: json['connected'] == true,
         remoteId: json['remoteId'] as String?,
         homeRelay: json['homeRelay'] as String?,
+        webPort: (json['webPort'] as num?)?.toInt(),
         paths: [
           for (final p in (json['paths'] as List? ?? const []).cast<Map<String, dynamic>>())
             PipePath(relay: p['relay'] == true, selected: p['selected'] == true, rttMs: (p['rttMs'] as num?)?.toInt() ?? 0),
@@ -62,6 +66,11 @@ abstract interface class IrohPipe {
   Future<PipeHandle> open(String ticket, String socketPath);
 
   Future<void> close(String hostId);
+
+  /// Serve the host's DSH Web tunnel on a 127.0.0.1 port ([preferredPort] when free); the host must be open.
+  Future<int> openWeb(String hostId, int preferredPort);
+
+  Future<void> closeWeb(String hostId);
   Future<PipeStatus> status(String hostId);
 
   /// The EndpointId a ticket names, without dialing.
@@ -78,6 +87,8 @@ typedef _StartD = Pointer<Utf8> Function(Pointer<Uint8>, int, Pointer<Utf8>);
 typedef _TwoC = Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>);
 typedef _OneC = Pointer<Utf8> Function(Pointer<Utf8>);
 typedef _NoneC = Pointer<Utf8> Function();
+typedef _WebC = Pointer<Utf8> Function(Pointer<Utf8>, Uint16);
+typedef _WebD = Pointer<Utf8> Function(Pointer<Utf8>, int);
 typedef _FreeC = Void Function(Pointer<Utf8>);
 typedef _FreeD = void Function(Pointer<Utf8>);
 
@@ -104,7 +115,9 @@ Map<String, dynamic> _invoke(String name, List<Object> args) {
         reply = lib.lookupFunction<_StartC, _StartD>('dshr_start')(bytes, key.length, text(args[1]));
       case 'open':
         reply = lib.lookupFunction<_TwoC, _TwoC>('dshr_open')(text(args[0]), text(args[1]));
-      case 'close' || 'status' || 'ticket_info':
+      case 'open_web':
+        reply = lib.lookupFunction<_WebC, _WebD>('dshr_open_web')(text(args[0]), args[1] as int);
+      case 'close' || 'close_web' || 'status' || 'ticket_info':
         reply = lib.lookupFunction<_OneC, _OneC>('dshr_$name')(text(args[0]));
       case 'network_changed' || 'stop':
         reply = lib.lookupFunction<_NoneC, _NoneC>('dshr_$name')();
@@ -139,6 +152,12 @@ class NativeIrohPipe implements IrohPipe {
 
   @override
   Future<void> close(String hostId) => _call('close', [hostId]);
+
+  @override
+  Future<int> openWeb(String hostId, int preferredPort) async => ((await _call('open_web', [hostId, preferredPort]))['port'] as num).toInt();
+
+  @override
+  Future<void> closeWeb(String hostId) => _call('close_web', [hostId]);
 
   @override
   Future<PipeStatus> status(String hostId) async => PipeStatus.fromJson(await _call('status', [hostId]));

@@ -9,13 +9,17 @@
 // (pairing codes live 120 s; a device test fetches its own once the app is installed).
 // With --relays <url>[,<url>] the host homes on those relays and binds every
 // interface, so a physical phone can reach it (direct on the LAN, else relayed).
+// A fake DSH Web (test/helpers/fake-dsh-web.ts) sits behind the web tunnel.
 import { generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
 import { createServer } from 'node:http';
 import { createInterface } from 'node:readline';
+import { startFakeDshWeb } from '../helpers/fake-dsh-web.ts';
 import { startLiveHost } from '../helpers/live.ts';
 
 const relays = process.argv.includes('--relays') ? process.argv[process.argv.indexOf('--relays') + 1]!.split(',') : undefined;
-const live = await startLiveHost(relays === undefined ? { iroh: true } : { relays });
+const dshWeb = await startFakeDshWeb();
+const web = { target: () => ({ host: '127.0.0.1', port: dshWeb.port }), launchTokenQuery: () => `token=${dshWeb.token}` };
+const live = await startLiveHost(relays === undefined ? { iroh: true, web } : { relays, web });
 if (relays !== undefined) await live.host.endpoint!.online(10_000);
 live.host.onPairingChange((request) => {
   if (request.state === 'pending') void live.host.approvePairing(request.pairingRequestId);
@@ -45,5 +49,6 @@ lines.on('line', (line) => {
 });
 lines.on('close', async () => {
   await live.close();
+  await dshWeb.close();
   process.exit(0);
 });

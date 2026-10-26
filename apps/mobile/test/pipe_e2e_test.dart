@@ -1,8 +1,8 @@
 // The app's transport end to end on the development machine: the real
-// PairingController, HostApi and EventsConnection, through the real Rust pipe
-// (dart:ffi) and QUIC, to the host plugin (packages/dsh-plugin
-// test/fixtures/iroh-host.ts). Only the keystore and secure storage are fakes:
-// the fixture signs with P-256 for us. Opt-in:
+// PairingController and HostApi, then the DSH Web tunnel, through the real
+// Rust pipe (dart:ffi) and QUIC, to the host plugin (packages/dsh-plugin
+// test/fixtures/iroh-host.ts, with a fake DSH Web behind it). Only the keystore
+// and secure storage are fakes: the fixture signs with P-256 for us. Opt-in:
 //   (cd native/dshr_pipe && cargo build)
 //   DSHR_PIPE_LIB=$PWD/native/dshr_pipe/target/debug/libdshr_pipe.dylib DSHR_FIXTURE_NODE=$(which node) \
 //     flutter test test/pipe_e2e_test.dart
@@ -17,10 +17,11 @@ import 'package:dsh_remote/state/pairing.dart';
 import 'package:dsh_remote/state/pipe_manager.dart';
 import 'package:dsh_remote/state/providers.dart';
 import 'package:dsh_remote/storage/secure_store.dart';
-import 'package:dsh_remote/transport/events_client.dart';
 import 'package:dsh_remote/transport/iroh_pipe.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'support/web_login.dart';
 
 /// The Node host fixture: one JSON line out per JSON line in.
 class _Fixture {
@@ -97,19 +98,11 @@ class _FixtureKeys implements DeviceKeys {
   Future<void> delete(String alias) async {}
 }
 
-Future<void> _until(bool Function() condition, String what) async {
-  final deadline = DateTime.now().add(const Duration(seconds: 15));
-  while (!condition()) {
-    if (DateTime.now().isAfter(deadline)) fail('timed out waiting for $what');
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-  }
-}
-
 void main() {
   final node = Platform.environment['DSHR_FIXTURE_NODE'];
   final skip = Platform.environment['DSHR_PIPE_LIB'] == null || node == null ? 'set DSHR_PIPE_LIB and DSHR_FIXTURE_NODE' : false;
 
-  test('pairs, reads, prompts and streams through the Rust pipe', () async {
+  test('pairs, then opens DSH Web through the tunnel', () async {
     final fixture = await _Fixture.start(node!);
     addTearDown(fixture.stop);
     final socketDir = Directory.systemTemp.createTempSync('dshr');
@@ -134,33 +127,26 @@ void main() {
     final host = (await container.read(hostsProvider.future)).single;
     expect(host.name, 'Home Lab');
 
-    // REST over the pipe, signed by the paired key.
+    // The signed request opens this phone's web window; the tunnel then serves DSH Web.
     final session = container.read(hostSessionProvider(fixture.hostId))!;
-    expect((await session.api.sessions()).map((s) => s.sessionId), contains('session-a'));
-    final snapshot = await session.api.snapshot('session-a');
-
-    // The events WebSocket rides inside the same QUIC connection.
-    await _until(() => container.read(linkStateProvider(fixture.hostId)) == LinkState.online, 'the events socket');
-    final frames = <Map<String, dynamic>>[];
-    session.listenSession('session-a', frames.add);
-    session.events.subscribe('session-a', after: snapshot.cursor);
-    await _until(() => frames.any((f) => f['kind'] == 'subscribed'), 'subscribed');
-    final receipt = await session.api.sendPrompt('session-a', 'req_dart_e2e_1', 'hello through iroh');
-    expect(receipt.state, isNot('failed'));
-    await _until(() => frames.any((f) => f['kind'] == 'turn.finished'), 'the turn');
-    final kinds = [for (final f in frames) if (f['type'] == 'session.event' && f['ephemeral'] != true) f['kind']];
-    expect(kinds, containsAllInOrder(['turn.started', 'user.message', 'assistant.message', 'turn.finished']));
+    final web = await session.api.webSession();
+    final pipes = container.read(pipeManagerProvider);
+    final port = await pipes.openWeb(fixture.hostId, () => host.ticket);
+    expect(port, PipeManager.webPortFor(fixture.hostId), reason: 'the stable per-host port, when free');
+    expect(await webLogin(port, web.tokenQuery), contains('DeepSeek Harness'));
 
     // The connection details sheet reads the same pipe.
-    final status = await container.read(pipeManagerProvider).status(fixture.hostId);
+    final status = await pipes.status(fixture.hostId);
     expect(status.connected, isTrue);
     expect(status.remoteId, fixture.hostId);
+    expect(status.webPort, port);
     expect(status.selected?.relay, isFalse);
 
-    // Backgrounding closes the endpoint; the next request reopens it transparently.
-    session.events.stop();
-    await container.read(pipeManagerProvider).pause();
-    expect((await session.api.meta()).hostId, fixture.hostId);
+    // Backgrounding closes the endpoint; reopening finds the same port, so DSH Web keeps its origin.
+    await pipes.pause();
+    await session.api.webSession();
+    expect(await pipes.openWeb(fixture.hostId, () => host.ticket), port);
+    expect(await webLogin(port, web.tokenQuery), contains('DeepSeek Harness'));
   }, skip: skip, timeout: const Timeout(Duration(minutes: 2)));
 
   test('a pipe error surfaces as an unreachable host, not a crash', () async {

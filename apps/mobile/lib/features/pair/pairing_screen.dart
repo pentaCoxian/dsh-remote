@@ -30,10 +30,7 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
     final state = ref.watch(provider);
     final controller = ref.read(provider.notifier);
     ref.listen(provider, (_, next) {
-      if (next.step == PairingStep.done && next.hostId != null) {
-        final session = widget.payload.sessionId;
-        context.go(session == null ? '/host/${next.hostId}' : '/host/${next.hostId}/session/$session');
-      }
+      if (next.step == PairingStep.done && next.hostId != null) context.go('/host/${next.hostId}');
     });
     final text = Theme.of(context).textTheme;
     return Scaffold(
@@ -75,7 +72,7 @@ class _Progress extends StatelessWidget {
     final (title, detail, busy) = switch (state.step) {
       PairingStep.connecting => ('Connecting to the host…', 'Directly when possible, otherwise through an encrypted relay.', true),
       PairingStep.redeeming => ('Creating this phone’s key…', 'The private key stays in this phone’s secure hardware.', true),
-      PairingStep.waiting => ('Waiting for host approval', 'Approve this phone at the host (the /rc card or `dsh-remote pair`). The fingerprints must match.', true),
+      PairingStep.waiting => ('Waiting for host approval', 'Approve this phone at the host (`dsh-remote pair`). The fingerprints must match. Approving gives this phone full DSH Web access.', true),
       PairingStep.done => ('Paired', '', false),
       PairingStep.denied => ('Not approved', state.message ?? '', false),
       PairingStep.expired => ('Expired', state.message ?? '', false),

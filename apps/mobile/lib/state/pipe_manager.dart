@@ -62,6 +62,20 @@ class PipeManager {
 
   HostLink link(String hostId, String Function() ticket) => HostLink(() => socketFor(hostId, ticket));
 
+  /// The local port of [hostId]'s DSH Web tunnel, opening the host's pipe first if needed.
+  /// The port is stable per host when free, so DSH Web's browser storage (per origin) survives restarts.
+  Future<int> openWeb(String hostId, String Function() ticket) async {
+    await socketFor(hostId, ticket);
+    return pipe.openWeb(hostId, webPortFor(hostId));
+  }
+
+  Future<void> closeWeb(String hostId) async {
+    if (_open.containsKey(hostId)) await pipe.closeWeb(hostId).catchError((_) {});
+  }
+
+  /// 20000–59999, from the host id.
+  static int webPortFor(String hostId) => 20000 + int.parse(hostId.substring(0, 8), radix: 16) % 40000;
+
   /// Point an open pipe at a newer ticket; a closed one picks it up when it next opens.
   Future<void> refresh(String hostId, String ticket) async {
     if (_open.containsKey(hostId)) await pipe.open(ticket, _path(hostId));
