@@ -17,7 +17,8 @@
     "build": "node scripts/build.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "start": "node --conditions=source src/main.ts"
+    "start": "node --conditions=source src/main.ts",
+    "dev:gateway": "node --conditions=source scripts/dev-gateway.ts"
   },
   "dependencies": {
     "@dsh-remote/iroh-http": "workspace:*",

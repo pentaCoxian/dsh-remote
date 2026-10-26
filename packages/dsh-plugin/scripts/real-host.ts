@@ -3,12 +3,13 @@
 // model (test/integration/fake-llm.mjs) answers turns, so no API key is needed.
 //
 //   pnpm --filter @dsh-remote/dsh-plugin build
-//   node --conditions=source scripts/real-host.ts [--home DIR] [--relays default|none|<url>,<url>] [--approve] [--offers PORT]
+//   node --conditions=source scripts/real-host.ts [--home DIR] [--relays default|none|<url>,<url>] [--approve] [--offers PORT] [--push-gateway TICKET]
 //
 // Prints the pairing code as a QR and as text. --approve approves every pairing
 // request at once (never on a real host). --offers serves a fresh code at
 // http://127.0.0.1:PORT/offer, e.g. for `adb reverse` + `adb shell am start -d <code>`.
 // State persists in --home (default .dsh-home/real-host), so a paired phone stays paired.
+// --push-gateway sends notifications through that gateway (e.g. push-gateway's scripts/dev-gateway.ts).
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -28,6 +29,7 @@ const relaysOption = option('--relays') ?? 'default';
 const relays = relaysOption === 'none' ? [] : relaysOption === 'default' ? DEFAULT_RELAYS : relaysOption.split(',');
 const approve = args.includes('--approve');
 const offersPort = option('--offers') === undefined ? undefined : Number(option('--offers'));
+const pushGateway = option('--push-gateway') ?? null;
 const dshBin = join(dirname(createRequire(import.meta.url).resolve('@deepseek-ai/dsh/package.json')), 'lib', 'bin.js');
 
 if (!existsSync(join(pluginDir, 'dist/index.js'))) throw new Error('build the plugin first: pnpm --filter @dsh-remote/dsh-plugin build');
@@ -64,6 +66,7 @@ writeFileSync(
   config:
     hostName: Real DSH (dev)
     relays: ${JSON.stringify(relays)}
+    pushGateway: ${JSON.stringify(pushGateway)}
 - id: llm-pi-ai
   config:
     providers:

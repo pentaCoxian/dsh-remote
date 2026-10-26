@@ -1,4 +1,6 @@
 import { randomBytes } from 'node:crypto';
+import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { PushPlatform } from '@dsh-remote/protocol/push';
 
@@ -49,8 +51,9 @@ export class HandleStore {
     `);
   }
 
-  /** `path` is a file, or `:memory:` in tests. */
+  /** `path` is a file (its directory is created, private), or `:memory:` in tests. */
   static open(path: string): HandleStore {
+    if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
     return new HandleStore(new DatabaseSync(path));
   }
 
