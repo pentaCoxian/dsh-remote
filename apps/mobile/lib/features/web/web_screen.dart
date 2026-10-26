@@ -15,6 +15,20 @@ import '../../transport/iroh_pipe.dart';
 import '../../ui/widgets.dart';
 import '../../widgets/status.dart';
 
+/// dsh-mobile-maxxing's browser-only pieces (the "Add to Home Screen" card, the
+/// install button in the drawer and the PWA settings section) do not apply here:
+/// DSH Web runs inside this app, not in a browser tab, and a home-screen copy
+/// would point at this app's private tunnel port. Class names as of 0.6.0.
+const _embeddedStyle = '''
+(() => {
+  if (document.getElementById('dsh-remote-embedded')) return;
+  const style = document.createElement('style');
+  style.id = 'dsh-remote-embedded';
+  style.textContent = '.dsh-mobile-maxxing-install, .dsh-mobile-maxxing-foot, .dsh-mobile-maxxing-section { display: none !important; }';
+  document.head.append(style);
+})();
+''';
+
 /// DSH Web itself, full screen, through the host's end-to-end encrypted tunnel.
 ///
 /// Opening it sends a request signed by this phone's hardware key, which opens
@@ -133,7 +147,10 @@ class _WebScreenState extends ConsumerState<WebScreen> {
         return NavigationDecision.prevent;
       },
       onPageStarted: (_) => mounted ? setState(() => _loading = true) : null,
-      onPageFinished: (_) => mounted ? setState(() => _loading = false) : null,
+      onPageFinished: (_) {
+        unawaited(controller.runJavaScript(_embeddedStyle).catchError((_) {}));
+        if (mounted) setState(() => _loading = false);
+      },
       onWebResourceError: (error) {
         if (error.isForMainFrame != false && mounted) {
           setState(() => _error = 'Lost the connection to DSH Web.');
