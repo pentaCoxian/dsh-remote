@@ -32,15 +32,18 @@ object PushNotifications {
         val sessionId = message?.optString("sessionId").orEmpty()
         val body = message?.optString("body")?.takeIf { it.isNotEmpty() } ?: "New activity"
         val approval = kind == "approval" || kind == "test"
+        val title = message?.optString("title")?.takeIf { it.isNotEmpty() } ?: "DSH Remote"
+        // The host as sub-text, unless it is already the title.
+        val host = message?.optString("hostName")?.takeIf { it.isNotEmpty() && it != title }
         val open = Intent(Intent.ACTION_VIEW, Uri.parse(if (hostId == null) "dshremote://host/" else "dshremote://host/$hostId"), context, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
         val tap = PendingIntent.getActivity(context, (hostId ?: "").hashCode(), open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val notification = NotificationCompat.Builder(context, if (approval) APPROVALS else ACTIVITY)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(message?.optString("title")?.takeIf { it.isNotEmpty() } ?: "DSH Remote")
+            .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-            .setSubText(message?.optString("hostName")?.takeIf { it.isNotEmpty() })
+            .setSubText(host)
             .setPriority(if (approval) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
             .setCategory(if (approval) NotificationCompat.CATEGORY_REMINDER else NotificationCompat.CATEGORY_STATUS)
             .setWhen(message?.optLong("ts")?.takeIf { it > 0 } ?: System.currentTimeMillis())

@@ -84,7 +84,7 @@ export function pushRoutes(deps: PushRouteDeps): Route[] {
       scope: 'push:register',
       async handle({ device }) {
         if (!status(device).registered) throw new ApiError('NOT_FOUND', 'This phone is not registered for notifications');
-        const message = { v: 1 as const, id: `n_${randomBytes(12).toString('base64url')}`, kind: 'test' as const, hostId: deps.hostId, hostName: deps.hostName, title: deps.hostName, body: 'Notifications from this host work.', ts: deps.clock.now() };
+        const message = { v: 1 as const, id: `n_${randomBytes(12).toString('base64url')}`, kind: 'test' as const, hostId: deps.hostId, hostName: deps.hostName, title: 'Test notification', body: 'Notifications from this host work.', ts: deps.clock.now() };
         const result = await deps.sender.deliver(device, message, { urgency: 'high' });
         if (result === 'gone') throw new ApiError('HANDLE_GONE', 'The push gateway no longer reaches this phone; register again');
         if (result !== 'sent') throw new ApiError('UNAVAILABLE', 'The push gateway cannot be reached right now');

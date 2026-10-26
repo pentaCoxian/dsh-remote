@@ -197,7 +197,7 @@ describe('notifications through the push gateway', () => {
     const phone = await registeredPhone();
     const test = await live.signed(phone.phone, { method: 'POST', target: '/v1/push/test', port: phone.api.port });
     expect(test.status).toBe(202);
-    expect(opened(phone, 0)).toMatchObject({ kind: 'test', title: 'Home Lab', body: 'Notifications from this host work.' });
+    expect(opened(phone, 0)).toMatchObject({ kind: 'test', title: 'Test notification', hostName: 'Home Lab', body: 'Notifications from this host work.' });
 
     const put = (body: Record<string, unknown>) => live.signed(phone.phone, { method: 'PUT', target: '/v1/push', body: { gateway: gateway.endpointId, handle: phone.handle, key: phone.key.toString('base64url'), platform: 'fcm', events: APPROVALS_ONLY, ...body }, port: phone.api.port });
     expect((await put({ gateway: 'f'.repeat(64) })).status).toBe(400);

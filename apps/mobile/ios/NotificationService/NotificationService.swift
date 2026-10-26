@@ -23,8 +23,11 @@ final class NotificationService: UNNotificationServiceExtension {
       let message = try? JSONSerialization.jsonObject(with: plain) as? [String: Any],
       message["v"] as? Int == 1, message["hostId"] as? String == entry.hostId
     {
-      content.title = (message["title"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "DSH Remote"
-      content.subtitle = message["hostName"] as? String ?? ""
+      let title = (message["title"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "DSH Remote"
+      let host = message["hostName"] as? String ?? ""
+      content.title = title
+      // The host on its own line, unless it is already the title.
+      content.subtitle = host == title ? "" : host
       content.body = (message["body"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "New activity"
     }
     contentHandler(content)
