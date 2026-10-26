@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "HTTP/1.1 over iroh QUIC bi-streams: the socket-like stream node:http needs, and a small client",
+  "license": "MIT",
   "exports": {
     ".": {
       "source": "./src/index.ts",

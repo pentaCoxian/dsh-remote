@@ -32,6 +32,6 @@ jobs:
           gh release create "$GITHUB_REF_NAME" $(find dist -name '*.tgz') \
             --title "DSH Remote $GITHUB_REF_NAME" \
             --notes "Install the plugin next to dsh-mobile-maxxing (see docs/setup.md):
-          \`dsh plugin --profile web add ./dsh-remote-dsh-plugin-${GITHUB_REF_NAME#v}.tgz https://github.com/kuraneko1/dsh-mobile-maxxing/releases/download/v0.6.0/dsh-mobile-maxxing-0.6.0.tgz\`
+          \`dsh plugin --profile web add https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/dsh-remote-dsh-plugin-${GITHUB_REF_NAME#v}.tgz https://github.com/kuraneko1/dsh-mobile-maxxing/releases/download/v0.6.0/dsh-mobile-maxxing-0.6.0.tgz\`
 
           dsh-remote-push-gateway-*.tgz is the push gateway, for infra/push/deploy.sh."

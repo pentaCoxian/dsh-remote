@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "DSH Remote push gateway: forwards hosts' sealed notifications to APNs and FCM over iroh; sees only ciphertext",
+  "license": "MIT",
   "engines": {
     "node": ">=24.9"
   },

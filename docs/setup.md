@@ -19,12 +19,11 @@ Pair only phones you control.
 
 ## 1. Build and install the plugin
 
-From a release (built and smoke-tested by CI on every `v*` tag; the repository is private, so
-fetch it with an authenticated `gh`):
+From a release (built and smoke-tested by CI on every `v*` tag), on any machine with DSH:
 
 ```sh
-gh release download v0.1.0 -R pentaCoxian/dsh-remote -p 'dsh-remote-dsh-plugin-*.tgz'
-dsh plugin --profile web add ./dsh-remote-dsh-plugin-0.1.0.tgz \
+dsh plugin --profile web add \
+  https://github.com/pentaCoxian/dsh-remote/releases/download/v0.1.0/dsh-remote-dsh-plugin-0.1.0.tgz \
   https://github.com/kuraneko1/dsh-mobile-maxxing/releases/download/v0.6.0/dsh-mobile-maxxing-0.6.0.tgz
 ```
 

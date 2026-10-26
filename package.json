@@ -11,5 +11,6 @@
     "typecheck": "pnpm -r --if-present typecheck",
     "provision": "node deployment/provision.mjs",
     "render": "node deployment/render.mjs"
-  }
+  },
+  "license": "MIT"
 }

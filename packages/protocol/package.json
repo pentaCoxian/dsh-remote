@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "DSH Remote wire contract: canonical request signing, cursors, errors, pairing and schema validators",
+  "license": "MIT",
   "exports": {
     ".": {
       "source": "./src/index.ts",

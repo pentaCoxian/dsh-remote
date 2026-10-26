@@ -31,21 +31,25 @@ writeFileSync(`${out}/package.json`, `${JSON.stringify({
   name: '@dsh-remote/dsh-plugin',
   version: pkg.version,
   description: pkg.description,
+  license: 'MIT',
+  repository: { type: 'git', url: 'git+https://github.com/pentaCoxian/dsh-remote.git' },
   type: 'module',
   engines: pkg.engines,
   exports: { '.': './dist/index.js' },
   bin: { 'dsh-remote': './dist/cli.js' },
-  files: ['dist', 'cordis.patch.yml', 'README.md'],
+  files: ['dist', 'cordis.patch.yml', 'README.md', 'LICENSE'],
   dependencies: Object.fromEntries(external.map((name) => [name, pkg.dependencies[name]])),
   dsh: pkg.dsh,
 }, null, 2)}\n`);
 copyFileSync(`${root}cordis.patch.yml`, `${out}/cordis.patch.yml`);
+copyFileSync(`${root}../../LICENSE`, `${out}/LICENSE`);
 writeFileSync(`${out}/README.md`, `# DSH Remote plugin ${pkg.version}
 
 Use DeepSeek Harness Web from the DSH Remote phone app, end-to-end encrypted over iroh.
 
 \`\`\`sh
-dsh plugin --profile web add ./dsh-remote-dsh-plugin-${pkg.version}.tgz ${MOBILE_UI.tarball}
+dsh plugin --profile web add https://github.com/pentaCoxian/dsh-remote/releases/download/v${pkg.version}/dsh-remote-dsh-plugin-${pkg.version}.tgz \\
+  ${MOBILE_UI.tarball}
 \`\`\`
 
 Then restart DSH. It requires dsh-mobile-maxxing ${MOBILE_UI.minVersion}+ (DSH Web's phone layout), installed by the

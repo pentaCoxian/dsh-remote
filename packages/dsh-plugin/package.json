@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "DSH Remote: continue a DeepSeek Harness session from the native phone app over an end-to-end encrypted iroh connection",
+  "license": "MIT",
   "engines": {
     "node": ">=24.9",
     "dsh": "0.2.1-rc.3"
