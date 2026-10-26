@@ -1,6 +1,6 @@
 /**
- * Structural view of the DSH 0.2.1-rc.3 host services this plugin calls
- * (docs/dsh-adapter-findings.md). Declared locally so the plugin does not
+ * Structural view of the DSH 0.2.1-rc.3 host services this plugin calls.
+ * Declared locally so the plugin does not
  * compile against DSH internals; the integration test against the pinned
  * host is what proves the contract.
  */

@@ -21,7 +21,7 @@ interface FakeSession {
 
 /**
  * In-memory stand-in for DSH used by tests and the dev host. It mirrors the
- * DSH behaviour recorded in docs/dsh-adapter-findings.md: dense per-session
+ * behaviour of DSH 0.2.1-rc.3 that `pnpm test:dsh` checks: dense per-session
  * `seq`, a bounded follow snapshot, inbox splices carrying the request id, and
  * approvals that only exist inside a turn.
  */

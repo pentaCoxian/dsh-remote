@@ -1,6 +1,6 @@
 /**
  * The single seam between DSH Remote and DeepSeek Harness. `DshAdapter` binds it
- * to a pinned DSH build (see docs/dsh-adapter-findings.md); `FakeAdapter` backs
+ * to a pinned DSH build (`pnpm test:dsh` checks it there); `FakeAdapter` backs
  * tests and the dev host. Nothing outside an adapter imports DSH.
  */
 

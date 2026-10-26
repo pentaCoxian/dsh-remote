@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 
 /**
- * Stands in for DSH Web with its two gates (docs/dsh-adapter-findings.md A1):
+ * Stands in for DSH Web with its two gates:
  * the Host fence (loopback authorities on any port; Origin, when sent, must be
  * the same authority) and the launch-token → cookie exchange.
  */

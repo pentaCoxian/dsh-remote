@@ -4,11 +4,13 @@ Use your DeepSeek Harness (DSH) Web UI from your phone, from anywhere. The Andro
 DSH Web over an end-to-end encrypted iroh connection (QUIC, TLS 1.3, authenticated by the host's
 key), so there is no domain, VPN, port forwarding or publicly exposed DSH Web.
 
-Status: the plugin, the Tokyo relay pilot and the phone app (DSH Web over the tunnel) work end to
-end, on a real Pixel and the iOS simulator. Next is end-to-end encrypted push. The product contract is
-[DSH_Remote_Native_Product_and_Implementation_Spec_v0.3.md](DSH_Remote_Native_Product_and_Implementation_Spec_v0.3.md);
-its Cloudflare transport sections are superseded by iroh. Deviations forced by upstream DSH are
-recorded in `docs/`.
+Status: the plugin, the Tokyo relay and push gateway, and the phone app work end to end.
+- **DSH Web:** it runs over the tunnel with its phone layout from
+  [dsh-mobile-maxxing](https://github.com/kuraneko1/dsh-mobile-maxxing).
+- **Notifications:** they are end-to-end encrypted.
+- **Tested on devices:** a Pixel and an iPhone.
+
+Setup: [docs/setup.md](docs/setup.md).
 
 ## Layout
 
