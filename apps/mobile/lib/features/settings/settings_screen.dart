@@ -4,11 +4,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/protocol.dart';
+import '../../state/link.dart';
 import '../../state/providers.dart';
 import '../../transport/iroh_pipe.dart';
 import '../../widgets/status.dart';
 
-final _pipeStatusProvider = FutureProvider.autoDispose.family<PipeStatus, String>((ref, hostId) => ref.read(pipeManagerProvider).status(hostId));
+/// Checks the host for real (redialing if the connection dropped) and keeps the
+/// host's dot in step: the screen never shows a state it has not just observed.
+final _probeProvider = FutureProvider.autoDispose.family<PipeStatus, String>((ref, hostId) async {
+  final host = ref.read(hostsProvider).valueOrNull?.where((h) => h.hostId == hostId).firstOrNull;
+  if (host == null || host.revoked) return const PipeStatus(connected: false, paths: []);
+  final link = ref.read(linkStateProvider(hostId).notifier);
+  try {
+    final status = await ref.read(pipeManagerProvider).probe(hostId, () => host.ticket);
+    link.state = status.connected ? LinkState.online : LinkState.offline;
+    return status;
+  } catch (_) {
+    link.state = LinkState.offline;
+    rethrow;
+  }
+});
+
+/// The first 16 hex digits in groups of four, as `dsh-remote` shows host and key ids.
+String _grouped(String hex) => '${shortFingerprint(hex)}…';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key, required this.hostId});
@@ -35,56 +53,74 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final host = ref.watch(hostsProvider).valueOrNull?.where((h) => h.hostId == hostId).firstOrNull;
     if (host == null) return Scaffold(appBar: AppBar(), body: const Center(child: Text('This host is not paired.')));
-    final link = ref.watch(linkStateProvider(hostId));
-    final pipe = ref.watch(_pipeStatusProvider(hostId));
-    final text = Theme.of(context).textTheme;
-    final mono = text.bodySmall?.copyWith(fontFamily: 'monospace');
+    final probe = ref.watch(_probeProvider(hostId));
+    final scheme = Theme.of(context).colorScheme;
+    final mono = Theme.of(context).textTheme.bodyMedium?.copyWith(fontFamily: 'monospace', color: scheme.onSurfaceVariant);
+    final refresh = IconButton(tooltip: 'Check again', icon: const Icon(Icons.refresh), onPressed: () => ref.invalidate(_probeProvider(hostId)));
+
+    final Widget connection;
+    if (host.revoked) {
+      connection = ListTile(leading: const _Icon(child: LinkDot(LinkState.revoked)), title: Text(describeLink(LinkState.revoked).label));
+    } else {
+      connection = probe.when(
+        loading: () => const ListTile(leading: _Icon(child: SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))), title: Text('Checking the connection…')),
+        error: (error, _) => ListTile(
+          leading: const _Icon(child: LinkDot(LinkState.offline)),
+          title: Text(describeLink(LinkState.offline).label),
+          subtitle: Text(error is PipeException ? error.describe : '$error'),
+          trailing: refresh,
+        ),
+        data: (status) {
+          final path = status.selected;
+          if (!status.connected || path == null) {
+            return ListTile(leading: const _Icon(child: LinkDot(LinkState.offline)), title: const Text('Not connected'), trailing: refresh);
+          }
+          return ListTile(
+            leading: const _Icon(child: LinkDot(LinkState.online)),
+            title: Text(path.relay ? 'Connected through a relay' : 'Connected directly'),
+            subtitle: Text('Round trip ${path.rttMs} ms'),
+            trailing: refresh,
+          );
+        },
+      );
+    }
+    final homeRelay = probe.valueOrNull?.homeRelay;
+
     return Scaffold(
       appBar: AppBar(title: Text(host.name)),
       body: ListView(children: [
         const _Header('Connection'),
-        ListTile(leading: LinkDot(link), title: Text(describeLink(link).label)),
-        pipe.when(
-          loading: () => const ListTile(title: Text('Reading connection details…')),
-          error: (error, _) => ListTile(title: const Text('No connection details'), subtitle: Text('$error')),
-          data: (status) {
-            final path = status.selected;
-            final route = !status.connected || path == null ? 'Not connected' : path.relay ? 'Through an encrypted relay' : 'Direct';
-            return Column(children: [
-              ListTile(
-                leading: Icon(path?.relay == false ? Icons.bolt : Icons.alt_route),
-                title: Text(route),
-                subtitle: path == null ? null : Text('Round trip ${path.rttMs} ms'),
-                trailing: IconButton(tooltip: 'Refresh', icon: const Icon(Icons.refresh), onPressed: () => ref.invalidate(_pipeStatusProvider(hostId))),
-              ),
-              if (status.homeRelay != null) ListTile(leading: const Icon(Icons.hub_outlined), title: const Text('This phone’s relay'), subtitle: Text(Uri.parse(status.homeRelay!).host)),
-              if (status.webPort != null) ListTile(leading: const Icon(Icons.web), title: const Text('DSH Web tunnel'), subtitle: Text('Open on this phone at 127.0.0.1:${status.webPort}')),
-            ]);
-          },
-        ),
+        connection,
+        if (homeRelay != null) ListTile(leading: const _Icon(child: Icon(Icons.hub_outlined)), title: const Text('This phone’s relay'), subtitle: Text(Uri.parse(homeRelay).host)),
         const ListTile(
-          leading: Icon(Icons.lock_outline),
+          leading: _Icon(child: Icon(Icons.lock_outline)),
           title: Text('End-to-end encrypted'),
           subtitle: Text('QUIC with TLS 1.3, authenticated by the host’s key. Relays forward encrypted packets only.'),
         ),
         const _Header('Host'),
         ListTile(
+          leading: const _Icon(child: Icon(Icons.dns_outlined)),
           title: const Text('Host id'),
-          subtitle: Text(host.hostId, style: mono),
-          trailing: IconButton(tooltip: 'Copy host id', icon: const Icon(Icons.copy), onPressed: () => Clipboard.setData(ClipboardData(text: host.hostId))),
+          subtitle: Text(_grouped(host.hostId), style: mono),
+          trailing: IconButton(tooltip: 'Copy the full host id', icon: const Icon(Icons.copy), onPressed: () => Clipboard.setData(ClipboardData(text: host.hostId))),
         ),
-        ListTile(title: const Text('Paired'), subtitle: Text(relativeTime(host.pairedAt))),
+        ListTile(leading: const _Icon(child: Icon(Icons.schedule)), title: const Text('Paired'), subtitle: Text(relativeTime(host.pairedAt))),
         const _Header('This phone'),
-        ListTile(title: const Text('Device id'), subtitle: Text(host.deviceId, style: mono)),
+        ListTile(leading: const _Icon(child: Icon(Icons.smartphone)), title: const Text('Device id'), subtitle: Text(host.deviceId, style: mono)),
         ListTile(
+          leading: const _Icon(child: Icon(Icons.key_outlined)),
           title: const Text('Request key'),
-          subtitle: Text('${shortFingerprint(spkiFingerprint(host.devicePublicKey))} · ${host.hardwareBacked ? 'in secure hardware' : 'software key'}', style: mono),
+          subtitle: Text.rich(TextSpan(children: [
+            TextSpan(text: shortFingerprint(spkiFingerprint(host.devicePublicKey)), style: mono),
+            TextSpan(text: host.hardwareBacked ? '\nStored in secure hardware' : '\nSoftware key'),
+          ])),
+          isThreeLine: true,
         ),
         const SizedBox(height: 24),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
+            style: OutlinedButton.styleFrom(foregroundColor: scheme.error, side: BorderSide(color: scheme.error)),
             onPressed: () => _forget(context, ref, host.name),
             icon: const Icon(Icons.link_off),
             label: const Text('Forget this host'),
@@ -94,6 +130,15 @@ class SettingsScreen extends ConsumerWidget {
       ]),
     );
   }
+}
+
+/// Leading slot of fixed width, so dots, spinners and icons line up in one column.
+class _Icon extends StatelessWidget {
+  const _Icon({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(width: 24, child: Center(child: child));
 }
 
 class _Header extends StatelessWidget {

@@ -13,6 +13,15 @@ class PipeException implements Exception {
 
   @override
   String toString() => 'PipeException: $message';
+
+  /// A sentence for the UI (the native messages are lowercase fragments).
+  String get describe {
+    if (message.contains('did not answer')) return 'The host did not answer. Check that DSH is running there.';
+    if (message.startsWith('cannot reach the host')) return 'Cannot reach the host. Check this phone’s connection.';
+    if (message.isEmpty) return 'The connection failed.';
+    final sentence = '${message[0].toUpperCase()}${message.substring(1)}';
+    return sentence.endsWith('.') ? sentence : '$sentence.';
+  }
 }
 
 class PipeHandle {

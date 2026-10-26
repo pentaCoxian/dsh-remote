@@ -84,6 +84,16 @@ class PipeManager {
   /// The host a pairing ticket names (no dialing).
   Future<String> hostIdOf(String ticket) => pipe.ticketHostId(ticket);
 
+  /// Whether the host answers now: opens the pipe, or redials it if its
+  /// connection dropped (a cached socket alone proves nothing). Throws
+  /// [PipeException] when the host cannot be reached.
+  Future<PipeStatus> probe(String hostId, String Function() ticket) async {
+    final wasOpen = _open.containsKey(hostId);
+    await socketFor(hostId, ticket);
+    if (wasOpen) await pipe.open(ticket(), _path(hostId));
+    return pipe.status(hostId);
+  }
+
   Future<PipeStatus> status(String hostId) async {
     if (_started == null) return const PipeStatus(connected: false, paths: []);
     return pipe.status(hostId);

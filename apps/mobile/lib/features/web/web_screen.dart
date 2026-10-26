@@ -29,6 +29,7 @@ class WebScreen extends ConsumerStatefulWidget {
 class _WebScreenState extends ConsumerState<WebScreen> {
   WebViewController? _controller;
   late final AppLifecycleListener _lifecycle;
+  Timer? _watch;
   int? _port;
   String? _error;
   bool _loading = true;
@@ -42,11 +43,21 @@ class _WebScreenState extends ConsumerState<WebScreen> {
     // The app closes the tunnel when backgrounded (app.dart); reopen it on return.
     _lifecycle = AppLifecycleListener(onResume: () => unawaited(_connect()));
     unawaited(_connect());
+    // DSH Web shows its own reconnecting state; keep this app's dot honest too.
+    _watch = Timer.periodic(const Duration(seconds: 10), (_) => unawaited(_checkLink()));
+  }
+
+  Future<void> _checkLink() async {
+    if (_connecting || _port == null) return;
+    final status = await ref.read(pipeManagerProvider).status(_hostId).catchError((_) => const PipeStatus(connected: false, paths: []));
+    if (!mounted || ref.read(linkStateProvider(_hostId)) == LinkState.revoked) return;
+    _link(status.connected ? LinkState.online : LinkState.offline);
   }
 
   @override
   void dispose() {
     _lifecycle.dispose();
+    _watch?.cancel();
     unawaited(ref.read(pipeManagerProvider).closeWeb(_hostId));
     super.dispose();
   }
@@ -87,7 +98,7 @@ class _WebScreenState extends ConsumerState<WebScreen> {
       if (mounted) setState(() => _error = describeError(error));
     } on PipeException catch (error) {
       _link(LinkState.offline);
-      if (mounted) setState(() => _error = 'Cannot reach the home lab: ${error.message}');
+      if (mounted) setState(() => _error = error.describe);
     } catch (error) {
       // Never leave the screen spinning on an unexpected failure.
       _link(LinkState.offline);

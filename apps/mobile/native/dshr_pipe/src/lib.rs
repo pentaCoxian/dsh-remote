@@ -202,7 +202,16 @@ impl Pipes {
         let pipes = self.pipes.lock().await;
         let mut status = match pipes.get(&host) {
             Some(pipe) => {
+                // DSH Web runs over the web link, which may be the only live one.
                 let mut status = pipe.link.status().await;
+                if status["connected"] != true
+                    && let Some(web) = &pipe.web
+                {
+                    let web_status = web.link.status().await;
+                    if web_status["connected"] == true {
+                        status = web_status;
+                    }
+                }
                 status["webPort"] = json!(pipe.web.as_ref().map(|web| web.port));
                 status
             }
