@@ -1,4 +1,6 @@
 import { hostname } from 'node:os';
+import { TICKET } from '@dsh-remote/protocol';
+import { ticketEndpointId } from '../transport/iroh.ts';
 
 /** The `config:` block of the plugin's `cordis.patch.yml` entry. */
 export interface PluginConfig {
@@ -7,6 +9,8 @@ export interface PluginConfig {
   readonly relays: readonly string[];
   readonly grantTtlDays: number;
   readonly remoteApprovalTimeoutSec: number;
+  /** The push gateway's iroh ticket; null turns notifications off. */
+  readonly pushGateway: string | null;
 }
 
 /**
@@ -22,8 +26,14 @@ export const DEFAULT_RELAYS: readonly string[] = [
   'https://usw1-1.relay.n0.iroh.link./',
 ];
 
+/**
+ * The DSH Remote push gateway on the Tokyo relay box (infra/push/). It sees
+ * only sealed envelopes; null until it is deployed.
+ */
+export const DEFAULT_PUSH_GATEWAY: string | null = null;
+
 const LABEL = /^[^\x00-\x1f\x7f]{1,64}$/u;
-const KNOWN = new Set(['hostName', 'relays', 'grantTtlDays', 'remoteApprovalTimeoutSec']);
+const KNOWN = new Set(['hostName', 'relays', 'grantTtlDays', 'remoteApprovalTimeoutSec', 'pushGateway']);
 /** Sprint 1 settings for the Cloudflare transport. */
 const RETIRED = new Set(['publicHost', 'linkOrigin', 'access', 'port']);
 const MAX_RELAYS = 8;
@@ -64,6 +74,10 @@ export function parseConfig(raw: unknown): { ok: true; config: PluginConfig } | 
   }
   const grantTtlDays = integer(input.grantTtlDays, 90, 1, 365, 'grantTtlDays', problems);
   const remoteApprovalTimeoutSec = integer(input.remoteApprovalTimeoutSec, 900, 10, 86_400, 'remoteApprovalTimeoutSec', problems);
+  const pushGateway = input.pushGateway === undefined ? DEFAULT_PUSH_GATEWAY : input.pushGateway;
+  if (pushGateway !== null && (typeof pushGateway !== 'string' || !TICKET.test(pushGateway) || ticketEndpointId(pushGateway) === undefined)) {
+    problems.push('pushGateway must be an iroh endpoint ticket, or null to turn notifications off');
+  }
   if (problems.length > 0) return { ok: false, problems };
-  return { ok: true, config: { hostName: hostName as string, relays: [...(relays as string[])], grantTtlDays, remoteApprovalTimeoutSec } };
+  return { ok: true, config: { hostName: hostName as string, relays: [...(relays as string[])], grantTtlDays, remoteApprovalTimeoutSec, pushGateway: pushGateway as string | null } };
 }

@@ -51,7 +51,7 @@ export interface Reply {
 }
 
 interface RouteBase {
-  readonly method: 'GET' | 'POST' | 'DELETE';
+  readonly method: 'GET' | 'POST' | 'PUT' | 'DELETE';
   /** Pattern such as `/v1/sessions/:sessionId`. */
   readonly path: string;
   /** Schema for the JSON body; routes without one take no body. */

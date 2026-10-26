@@ -9,6 +9,7 @@ export interface HttpReply {
 }
 
 const DEFAULT_TIMEOUT_MS = 15_000;
+const DIAL_TIMEOUT_MS = 10_000;
 
 /**
  * HTTP/1.1 to one iroh peer on one ALPN, one bi-stream per request. The QUIC
@@ -94,7 +95,7 @@ export class IrohHttpClient {
       if (this.connection === current) this.connection = undefined;
     }
     if (this.connection === undefined) {
-      const dial = this.endpoint.connect(this.addr(), this.alpn);
+      const dial = withTimeout(this.endpoint.connect(this.addr(), this.alpn), DIAL_TIMEOUT_MS, 'dial timed out');
       this.connection = dial;
       dial.catch(() => {
         if (this.connection === dial) this.connection = undefined;
@@ -108,4 +109,12 @@ export class IrohHttpClient {
       if (live === connection) this.connection = undefined;
     }, () => {});
   }
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    promise.finally(() => clearTimeout(timer)),
+    new Promise<never>((_resolve, reject) => (timer = setTimeout(() => reject(new Error(message)), ms))),
+  ]);
 }

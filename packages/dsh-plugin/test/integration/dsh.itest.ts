@@ -4,13 +4,17 @@
 // real iroh connection (relays off) dialed from the pairing QR's ticket, through
 // the real native API, DSH session controller, gateway and approvals.
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer as createNetServer } from 'node:net';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CLOSE_CODES, parsePairingUrl, WEB_ALPN } from '@dsh-remote/protocol';
+import { IrohHttpClient } from '@dsh-remote/iroh-http';
+import { CLOSE_CODES, openPush, parsePairingUrl, PUSH_ALPN, WEB_ALPN } from '@dsh-remote/protocol';
+import { Gateway, GatewayTransport, HandleStore, type OutboundPush, type Sender } from '@dsh-remote/push-gateway';
+import iroh from '@number0/iroh';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { AdminClient } from '../../src/admin/socket.ts';
@@ -30,6 +34,11 @@ let admin: AdminClient;
 let sessionId: string;
 let phone: TestPhone;
 let log = '';
+/** A push gateway in this process; its FCM sender records instead of sending. */
+let gateway: GatewayTransport;
+let gatewayStore: HandleStore;
+const pushed: OutboundPush[] = [];
+const recorder: Sender = { send: async (push) => (pushed.push(push), { ok: true }), close: () => {} };
 
 async function freePort(): Promise<number> {
   const server = createNetServer();
@@ -62,6 +71,10 @@ beforeAll(async () => {
   const add = spawnSync(process.execPath, [dshBin, 'plugin', '--profile', 'web', 'add', pluginDir], { env, encoding: 'utf8' });
   if (add.status !== 0) throw new Error(`dsh plugin add failed:\n${add.stdout}\n${add.stderr}`);
 
+  gatewayStore = HandleStore.open(':memory:');
+  const app = new Gateway({ store: gatewayStore, senders: { fcm: recorder } });
+  gateway = await GatewayTransport.start({ secretKey: iroh.SecretKey.generate().toBytes(), relays: [], onStream: (stream, peerId) => app.accept(stream, peerId) });
+
   const overlay = join(home, 'itest.patch.yml');
   writeFileSync(
     overlay,
@@ -74,6 +87,7 @@ beforeAll(async () => {
         hostName: Harness
         relays: []
         remoteApprovalTimeoutSec: 60
+        pushGateway: ${gateway.ticket()}
 - id: llm-pi-ai
   config:
     providers:
@@ -108,6 +122,8 @@ afterAll(async () => {
   await tunnel?.close();
   dsh?.kill('SIGTERM');
   fakeModel?.kill();
+  await gateway?.close();
+  gatewayStore?.close();
   await new Promise((resolve) => setTimeout(resolve, 500));
   rmSync(home, { recursive: true, force: true });
 });
@@ -145,6 +161,37 @@ describe('DSH Remote inside dsh web 0.2.1-rc.3', () => {
     const reply = await signed({ method: 'GET', target: `/v1/sessions/${sessionId}` });
     expect(reply.status).toBe(200);
     expect(reply.json.session.sessionId).toBe(sessionId);
+  });
+
+  it('notifies an away phone from DSH’s own event feed: the approval, then the finished turn', async () => {
+    const status = await signed({ method: 'GET', target: '/v1/push' });
+    expect(status.json).toMatchObject({ gateway: gateway.ticket(), registered: false });
+    const toGateway = new IrohHttpClient(dialer.endpoint, () => iroh.EndpointTicket.fromString(status.json.gateway).endpointAddr(), PUSH_ALPN);
+    const hostId = dialer.connection.remoteId().toString();
+    const { handle } = (await toGateway.request('POST', '/v1/handles', { platform: 'fcm', token: 'fcm-token-itest', host: hostId })).body as { handle: string };
+    toGateway.close();
+    const key = randomBytes(32);
+    const events = { approval: true, turnFinished: true, turnFailed: false };
+    expect((await signed({ method: 'PUT', target: '/v1/push', body: { gateway: gateway.endpointId, handle, key: key.toString('base64url'), platform: 'fcm', events } })).status).toBe(200);
+    const read = (push: OutboundPush) => openPush(key, hostId, handle, push.envelope)!;
+
+    const prompt = await signed({ method: 'POST', target: `/v1/sessions/${sessionId}/prompts`, body: { clientRequestId: 'req_itest_push', text: 'please-use-a-tool' } });
+    expect(prompt.status).toBe(202);
+    const approval = await until(() => pushed.find((push) => read(push).kind === 'approval'), 'an approval notification');
+    expect(approval.urgency).toBe('high');
+    expect(read(approval)).toMatchObject({ hostId, hostName: 'Harness', sessionId, body: 'Approval needed: glob\nharness: glob needs approval' });
+
+    let asked: { approvalId: string; revision: number } | undefined;
+    for (let i = 0; i < 50 && asked === undefined; i += 1) {
+      const approvals = await signed({ method: 'GET', target: '/v1/approvals' });
+      asked = approvals.json.items.find((item: { sessionId: string; state: string }) => item.sessionId === sessionId && item.state === 'pending');
+      if (asked === undefined) await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+    if (asked === undefined) throw new Error('no pending approval listed');
+    expect((await signed({ method: 'POST', target: `/v1/approvals/${asked.approvalId}/responses`, body: { decision: 'allow_once', expectedRevision: asked.revision } })).status).toBe(200);
+    const finished = await until(() => pushed.find((push) => read(push).kind === 'turn.finished'), 'a turn-finished notification');
+    expect(read(finished)).toMatchObject({ sessionId, body: 'Tool finished; all done.' });
+    expect(pushed).toHaveLength(2);
   });
 
   it('tunnels the real DSH Web: DSH’s own fence and owner login accept the phone-side origin', async () => {
@@ -192,6 +239,9 @@ describe('DSH Remote inside dsh web 0.2.1-rc.3', () => {
     expect(user.payload).toMatchObject({ text: 'please-use-a-tool', origin: 'remote', deviceId: phone.deviceId, requestId: prompt.json.turnId });
     expect(frames.find((f) => f.kind === 'approval.resolved').payload.outcome).toBe('allowed_once');
     expect(frames.filter((f) => f.kind === 'assistant.message').map((f) => f.payload.text)).toContain('Tool finished; all done.');
+
+    // The phone has DSH Web open (the tunnel from the previous test), so nothing was pushed.
+    expect(pushed).toHaveLength(2);
 
     const final = await signed({ method: 'GET', target: `/v1/sessions/${sessionId}/prompts/req_itest_tool` });
     expect(['started', 'finished']).toContain(final.json.state);

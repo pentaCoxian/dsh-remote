@@ -29,6 +29,9 @@ importers:
       '@deepseek-ai/dsh':
         specifier: 0.2.1-rc.3
         version: 0.2.1-rc.3(5a5b5c5cc6209902dfe1f9e3f798996f)
+      '@dsh-remote/push-gateway':
+        specifier: workspace:*
+        version: link:../push-gateway
       '@types/node':
         specifier: 24.19.2
         version: 24.19.2

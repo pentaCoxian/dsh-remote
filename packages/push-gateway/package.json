@@ -7,6 +7,12 @@
   "engines": {
     "node": ">=24.9"
   },
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
   "scripts": {
     "build": "node scripts/build.ts",
     "typecheck": "tsc --noEmit",

@@ -81,6 +81,8 @@ export function startRemote(ctx: DshContext, config: PluginConfig, runtime: RcRu
         audit,
         iroh: { relays: config.relays },
         web: dshWeb(ctx),
+        push: { gateway: config.pushGateway },
+        log: (line) => ctx.logger?.info(line),
         hostName: config.hostName,
         grantTtlMs: config.grantTtlDays * 86_400_000,
         remoteApprovalTimeoutMs: config.remoteApprovalTimeoutSec * 1000,

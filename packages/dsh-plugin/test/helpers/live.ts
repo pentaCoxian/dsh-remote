@@ -36,7 +36,7 @@ export interface TestSocket {
  * real endpoint with relays off, bound to 127.0.0.1; with `relays`, one homed on
  * those relays and bound to every interface, for phones on other machines.
  */
-export async function startLiveHost(options: { remoteApprovalTimeoutMs?: number; iroh?: boolean; relays?: readonly string[]; web?: WebGatewayOptions } = {}): Promise<LiveHost> {
+export async function startLiveHost(options: { remoteApprovalTimeoutMs?: number; iroh?: boolean; relays?: readonly string[]; web?: WebGatewayOptions; push?: { gateway: string | null } } = {}): Promise<LiveHost> {
   const adapter = new FakeAdapter();
   adapter.addSession('session-a', { cwd: '/home/me/secret-client/api', title: 'Refactor the API' });
   adapter.addSession('session-b', { cwd: '/home/me/other', title: 'Unpublished' });
@@ -52,6 +52,7 @@ export async function startLiveHost(options: { remoteApprovalTimeoutMs?: number;
     ...(options.relays !== undefined ? { iroh: { relays: options.relays } } : options.iroh === true ? { iroh: { relays: [], bindAddr: '127.0.0.1:0' } } : {}),
     hostName: 'Home Lab',
     ...(options.web === undefined ? {} : { web: options.web }),
+    ...(options.push === undefined ? {} : { push: options.push }),
     grantTtlMs: 90 * 24 * 3600_000,
     remoteApprovalTimeoutMs: options.remoteApprovalTimeoutMs ?? 2_000,
     heartbeatMs: 150,

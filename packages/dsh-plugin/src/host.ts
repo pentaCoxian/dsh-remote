@@ -1,9 +1,10 @@
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
-import { buildPairingUrl, shortFingerprint } from '@dsh-remote/protocol';
+import { buildPairingUrl, PUSH_ALPN, shortFingerprint } from '@dsh-remote/protocol';
 import { EventsSocket } from './api/events.ts';
 import { metaRoutes } from './api/meta.ts';
 import { pairingRoutes } from './api/pairing.ts';
+import { pushRoutes, type PushGatewayConfig } from './api/push.ts';
 import { sessionRoutes } from './api/sessions.ts';
 import { webRoutes } from './api/web.ts';
 import type { SessionAdapter } from './core/adapter.ts';
@@ -20,7 +21,9 @@ import { Receipts, type ReceiptsDocument } from './core/receipts.ts';
 import { HostState, type DeviceRecord, type HostStateDocument } from './core/state.ts';
 import type { DocumentStore } from './core/store.ts';
 import { NativeApi } from './http/server.ts';
-import { bareTicket, IrohTransport, type TransportStatus } from './transport/iroh.ts';
+import { Notifier } from './push/notifier.ts';
+import { PushSender, type GatewayLink } from './push/sender.ts';
+import { bareTicket, IrohTransport, ticketEndpointId, type TransportStatus } from './transport/iroh.ts';
 import { WebGateway, type WebGatewayOptions } from './web/gateway.ts';
 
 export interface RemoteHostOptions {
@@ -36,6 +39,10 @@ export interface RemoteHostOptions {
   readonly iroh?: { readonly relays: readonly string[]; readonly bindAddr?: string };
   /** The DSH Web tunnel; absent, the host serves only the native API. */
   readonly web?: WebGatewayOptions;
+  /** Notifications through this push gateway (a ticket); null turns them off but keeps `/v1/push` answering. */
+  readonly push?: { readonly gateway: string | null };
+  /** Operational messages for the owner (DSH's logger in production). */
+  readonly log?: (line: string) => void;
   /** TESTS AND THE DEV HOST ONLY: also serve 127.0.0.1:`port`, taking each request's peer from `identify`. */
   readonly loopback?: { readonly port: number; identify(req: IncomingMessage): PeerIdentity | undefined };
   readonly hostName: string;
@@ -86,6 +93,8 @@ export interface DeviceSummary {
 
 const CAPABILITIES = ['sessions', 'events', 'prompts', 'cancel', 'approvals', 'control-lease'];
 const REVOKE_HANGUP_MS = 1_000;
+/** A phone that left DSH Web this recently is still treated as looking at it. */
+const PRESENCE_GRACE_MS = 20_000;
 
 export interface HostStatus {
   readonly hostId: string;
@@ -97,6 +106,8 @@ export interface HostStatus {
   readonly loopbackPort: number | null;
   /** The DSH Web tunnel: null when not configured, else why it cannot serve (or 'ready'). */
   readonly web: string | null;
+  /** The push gateway's EndpointId (null when notifications are off) and how many devices it reaches. */
+  readonly push: { readonly gateway: string | null; readonly devices: number };
   readonly published: string[];
   readonly devices: number;
   readonly pendingPairings: number;
@@ -118,6 +129,9 @@ export class RemoteHost {
   readonly socket: EventsSocket;
   readonly adapter: SessionAdapter;
   readonly web: WebGateway | undefined;
+  readonly notifier: Notifier;
+  private readonly pushGateway: PushGatewayConfig | undefined;
+  private gatewayLink: GatewayLink | undefined;
   private readonly options: RemoteHostOptions;
   private readonly disposers: (() => void)[] = [];
   private transport: IrohTransport | undefined;
@@ -137,12 +151,27 @@ export class RemoteHost {
     this.socket = new EventsSocket({ events: this.events, state, leases: this.leases, approvals: this.approvals, clock, ...(options.heartbeatMs === undefined ? {} : { heartbeatMs: options.heartbeatMs }) });
     const proof = new ProofVerifier(state, clock, options.bootMs ?? clock.now());
     this.web = options.web === undefined ? undefined : new WebGateway(state, clock, options.web);
+    const gatewayTicket = options.push?.gateway ?? null;
+    const gatewayId = gatewayTicket === null ? undefined : ticketEndpointId(gatewayTicket);
+    this.pushGateway = gatewayTicket === null || gatewayId === undefined ? undefined : { ticket: gatewayTicket, id: gatewayId };
+    const pushSender = new PushSender(state, () => this.gateway());
+    this.notifier = new Notifier({
+      adapter: this.adapter,
+      state,
+      clock,
+      hostId,
+      hostName: options.hostName,
+      present: (device) => this.transport?.webPresent(device.peerId, PRESENCE_GRACE_MS) ?? false,
+      deliver: (device, message, delivery) => pushSender.deliver(device, message, delivery),
+      ...(options.log === undefined ? {} : { log: options.log }),
+    });
     this.api = new NativeApi({
       proof,
       routes: [
-        ...metaRoutes({ hostId, clock, hostName: options.hostName, capabilities: CAPABILITIES, address: () => this.address() }),
+        ...metaRoutes({ hostId, clock, hostName: options.hostName, capabilities: this.pushGateway === undefined ? CAPABILITIES : [...CAPABILITIES, 'push'], address: () => this.address() }),
         ...pairingRoutes({ pairing: this.pairing, proof }),
         ...(this.web === undefined ? [] : webRoutes(this.web)),
+        ...(options.push === undefined ? [] : pushRoutes({ state, clock, hostId, hostName: options.hostName, gateway: this.pushGateway, sender: pushSender })),
         ...sessionRoutes({ adapter: this.adapter, state, events: this.events, receipts, leases: this.leases, approvals: this.approvals, clock }),
       ],
       upgrade: this.socket.route,
@@ -191,6 +220,7 @@ export class RemoteHost {
       this.state.onPublicationChanged(() => adapter.accessChanged()),
     );
     this.events.start();
+    if (this.pushGateway !== undefined) this.disposers.push(this.notifier.start());
     if (this.options.iroh !== undefined) {
       this.transport = await IrohTransport.start({
         secretKey: this.options.hostKey.secretKeyBytes(),
@@ -207,9 +237,21 @@ export class RemoteHost {
     for (const dispose of this.disposers.splice(0)) dispose();
     this.events.stop();
     this.socket.close();
+    this.gatewayLink?.close();
+    this.gatewayLink = undefined;
     await this.transport?.close();
     this.transport = undefined;
     await this.api.close();
+  }
+
+  /** The push gateway over this host's iroh endpoint, dialed on first use. */
+  private gateway(): GatewayLink | undefined {
+    if (this.pushGateway === undefined || this.transport === undefined) return undefined;
+    if (this.gatewayLink === undefined) {
+      const client = this.transport.httpClient(this.pushGateway.ticket, PUSH_ALPN);
+      this.gatewayLink = { id: this.pushGateway.id, request: (method, path, body) => client.request(method, path, body), close: () => client.close() };
+    }
+    return this.gatewayLink;
   }
 
   /** Current ticket and home relay, or undefined without an endpoint. */
@@ -279,6 +321,7 @@ export class RemoteHost {
       transport: this.transport?.status() ?? null,
       loopbackPort: this.listeningPort ?? null,
       web: this.web === undefined ? null : (this.web.unavailable() ?? 'ready'),
+      push: { gateway: this.pushGateway?.id ?? null, devices: this.state.devices().filter((d) => d.revokedAt === null && d.push !== undefined && d.push.gateway === this.pushGateway?.id).length },
       published: this.state.publications().map((p) => p.sessionId),
       devices: this.state.devices().filter((d) => d.revokedAt === null).length,
       pendingPairings: this.pairing.pending().length,

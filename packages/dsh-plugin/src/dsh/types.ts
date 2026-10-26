@@ -38,6 +38,12 @@ export type DshAssistantFrame =
   | { readonly type: 'chunk'; readonly attemptId: string; readonly index: number; readonly time: number; readonly chunk: unknown }
   | { readonly type: 'end'; readonly attemptId: string; readonly outcome: { readonly kind: 'committed' | 'abandoned' } };
 
+/** The parts of a live DSH `Session` the plugin reads. */
+export interface DshSession {
+  readonly id: string;
+  readonly header?: { readonly origin?: 'subagent' };
+}
+
 export interface DshApprovalRequest {
   readonly agent: { readonly id: string; readonly session?: { readonly id: string } };
   readonly toolName: string;
@@ -103,6 +109,10 @@ export interface DshContext {
     register(definition: { name: string; description: string; recordInput?: boolean; handler(invocation: DshCommandInvocation): DshCommandResult | Promise<DshCommandResult> }): () => void;
   };
   on(event: 'approval/request', listener: (this: unknown, request: DshApprovalRequest, next: () => Promise<DshApprovalOutcome>) => Promise<DshApprovalOutcome>, options: { prepend: boolean }): () => void;
+  /** Post-commit feed of every session's appended events (`@deepseek-ai/dsh-session`). */
+  on(event: 'session/event', listener: (session: DshSession, event: DshWireEvent) => void): () => void;
+  /** An agent failure outside a durable turn position (`@deepseek-ai/dsh-api-session-controller`). */
+  on(event: 'api-session/error', listener: (sessionId: string, message: string) => void): () => void;
   effect(execute: () => (() => unknown) | Promise<() => unknown>, label?: string): unknown;
   readonly logger?: DshLogger;
 }

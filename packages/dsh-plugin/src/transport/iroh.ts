@@ -1,5 +1,5 @@
 import type { Duplex } from 'node:stream';
-import { PeerStream } from '@dsh-remote/iroh-http';
+import { IrohHttpClient, PeerStream } from '@dsh-remote/iroh-http';
 import { WEB_ALPN } from '@dsh-remote/protocol';
 import iroh from '@number0/iroh';
 import type { Connection, Endpoint as IrohEndpoint, Incoming } from '@number0/iroh';
@@ -53,6 +53,8 @@ interface Live {
   readonly peerId: string;
   readonly connection: Connection;
   readonly streams: Set<PeerStream>;
+  /** A DSH Web tunnel connection, i.e. the phone has DSH Web open. */
+  readonly web: boolean;
 }
 
 /**
@@ -63,6 +65,8 @@ interface Live {
  */
 export class IrohTransport {
   private readonly live = new Set<Live>();
+  /** When each peer's last DSH Web connection ended. */
+  private readonly webClosedAt = new Map<string, number>();
   private readonly limits: TransportLimits;
   private readonly endpoint: IrohEndpoint;
   private readonly options: IrohTransportOptions;
@@ -115,6 +119,23 @@ export class IrohTransport {
     for (const live of this.live) if (live.peerId === peerId) live.connection.close(1n, Array.from(Buffer.from(reason, 'utf8')));
   }
 
+  /**
+   * Whether `peerId` has DSH Web open: a live tunnel connection, or one that
+   * ended less than `graceMs` ago (a network change, a quick app switch). The
+   * app closes its tunnel when it leaves DSH Web or goes to the background.
+   */
+  webPresent(peerId: string, graceMs: number): boolean {
+    for (const live of this.live) if (live.web && live.peerId === peerId) return true;
+    const closedAt = this.webClosedAt.get(peerId);
+    return closedAt !== undefined && Date.now() - closedAt < graceMs;
+  }
+
+  /** HTTP to another iroh peer (the push gateway), dialed with this host's key, so it sees the host id. */
+  httpClient(ticket: string, alpn: string): IrohHttpClient {
+    const addr = EndpointTicket.fromString(ticket).endpointAddr();
+    return new IrohHttpClient(this.endpoint, () => addr, alpn);
+  }
+
   status(): TransportStatus {
     const addr = this.endpoint.addr();
     return { relays: this.options.relays, homeRelay: addr.relayUrl(), directAddresses: addr.directAddresses(), connections: this.live.size };
@@ -151,7 +172,7 @@ export class IrohTransport {
       return;
     }
     connection.setMaxConcurrentBiStreams(BigInt(this.limits.maxStreamsPerConnection));
-    const live: Live = { peerId, connection, streams: new Set() };
+    const live: Live = { peerId, connection, streams: new Set(), web: web !== undefined };
     this.live.add(live);
     const peer: PeerIdentity = { peerId };
     try {
@@ -166,8 +187,18 @@ export class IrohTransport {
       // The connection closed or was lost.
     } finally {
       this.live.delete(live);
+      if (live.web) this.webClosedAt.set(peerId, Date.now());
       for (const stream of live.streams) stream.destroy();
     }
+  }
+}
+
+/** The EndpointId a ticket names, or undefined when it is not a ticket. */
+export function ticketEndpointId(ticket: string): string | undefined {
+  try {
+    return EndpointTicket.fromString(ticket).endpointAddr().id().toString();
+  } catch {
+    return undefined;
   }
 }
 

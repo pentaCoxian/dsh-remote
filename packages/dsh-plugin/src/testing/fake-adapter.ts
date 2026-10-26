@@ -7,6 +7,7 @@ import {
   type HostSession,
   type PromptSubmission,
   type SessionAdapter,
+  type SessionObserver,
   type WireEvent,
 } from '../core/adapter.ts';
 
@@ -39,6 +40,7 @@ export class FakeAdapter implements SessionAdapter {
   /** Answer of the local DSH Web card; undefined keeps it pending until `settleLocal`. */
   localOutcome: ApprovalOutcome | undefined = undefined;
   private answerer: ApprovalAnswerer | undefined;
+  private readonly observers = new Set<SessionObserver>();
   private settleLocal: ((outcome: ApprovalOutcome) => void) | undefined;
   localWithdrawn = 0;
 
@@ -59,7 +61,13 @@ export class FakeAdapter implements SessionAdapter {
     session.log.push(event);
     session.info = { ...session.info, updatedAt: event.time };
     for (const follower of session.followers) follower.push({ type: 'event', event });
+    for (const observer of this.observers) observer(sessionId, event);
     return event;
+  }
+
+  /** The agent failed outside a turn (DSH's `api-session/error`). */
+  failSession(sessionId: string, message: string): void {
+    for (const observer of this.observers) observer(sessionId, { type: 'session/error', seq: -1, time: Date.now(), data: { message } });
   }
 
   stream(sessionId: string, frame: Extract<FollowFrame, { type: 'assistant-stream' }>['frame']): void {
@@ -196,6 +204,11 @@ export class FakeAdapter implements SessionAdapter {
 
   accessChanged(): void {
     this.accessChanges += 1;
+  }
+
+  observe(listener: SessionObserver): () => void {
+    this.observers.add(listener);
+    return () => this.observers.delete(listener);
   }
 
   private require(sessionId: string): FakeSession {

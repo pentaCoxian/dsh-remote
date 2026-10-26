@@ -73,7 +73,15 @@ export interface SessionAdapter {
   answerApprovals(answerer: ApprovalAnswerer): () => void;
   /** Publication or device grants changed; refresh DSH-side access control. */
   accessChanged(): void;
+  /**
+   * Every event DSH commits to any top-level session from now on (no replay),
+   * plus agent failures outside a turn as `session/error` events with
+   * `{ message }`. For notifications; returns its disposer.
+   */
+  observe(listener: SessionObserver): () => void;
 }
+
+export type SessionObserver = (sessionId: string, event: WireEvent) => void;
 
 /** A DSH call failed in a way that says nothing about whether it took effect. */
 export class AdapterUncertainError extends Error {

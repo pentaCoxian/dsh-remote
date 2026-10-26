@@ -54,6 +54,7 @@
     "typescript": "5.9.3",
     "vitest": "4.1.12",
     "@types/qrcode": "1.5.6",
-    "@deepseek-ai/dsh": "0.2.1-rc.3"
+    "@deepseek-ai/dsh": "0.2.1-rc.3",
+    "@dsh-remote/push-gateway": "workspace:*"
   }
 }

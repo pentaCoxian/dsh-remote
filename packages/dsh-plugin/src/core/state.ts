@@ -1,4 +1,4 @@
-import type { Scope } from '@dsh-remote/protocol';
+import type { PushEvents, PushPlatform, Scope } from '@dsh-remote/protocol';
 import type { Clock } from './clock.ts';
 import type { DocumentStore } from './store.ts';
 
@@ -17,6 +17,20 @@ export interface DeviceRecord {
   readonly expiresAt: number;
   lastSeenAt: number | null;
   revokedAt: number | null;
+  /** Where and how to notify this device; absent until it registers (`PUT /v1/push`). */
+  push?: PushRegistration;
+}
+
+/** A device's notification route: its gateway handle and the key only it and this host hold. */
+export interface PushRegistration {
+  /** EndpointId of the push gateway that issued the handle. */
+  readonly gateway: string;
+  readonly handle: string;
+  /** base64url of the device's 32-byte AES-256-GCM key for this host. */
+  readonly key: string;
+  readonly platform: PushPlatform;
+  readonly events: PushEvents;
+  readonly registeredAt: number;
 }
 
 export interface Publication {
@@ -65,11 +79,20 @@ export class HostState {
   /**
    * Open or create the document. A Sprint 1 (version 1) file keeps its
    * published sessions; its devices are dropped because they were bound to
-   * Cloudflare Access identities, which nothing presents any more.
+   * Cloudflare Access identities, which nothing presents any more. Grants made
+   * before push existed gain `push:register` when they already hold `web:open`,
+   * which is owner-equivalent.
    */
   static async open(store: DocumentStore<HostStateDocument>, clock: Clock): Promise<HostState> {
     const existing = (await store.read()) as HostStateDocument | HostStateDocumentV1 | undefined;
-    if (existing?.version === 2) return new HostState(store, clock, existing);
+    if (existing?.version === 2) {
+      const stale = existing.devices.filter((device) => device.scopes.includes('web:open') && !device.scopes.includes('push:register'));
+      if (stale.length > 0) {
+        existing.devices = existing.devices.map((device) => (stale.includes(device) ? { ...device, scopes: [...device.scopes, 'push:register'] } : device));
+        await store.write(existing);
+      }
+      return new HostState(store, clock, existing);
+    }
     if (existing !== undefined && existing.version !== 1) throw new Error('dsh-remote: unsupported state.json version');
     const doc: HostStateDocument = { version: 2, devices: [], published: existing?.published ?? [] };
     await store.write(doc);
@@ -90,11 +113,12 @@ export class HostState {
     await this.store.write(this.doc);
   }
 
-  /** Revoke a device and notify listeners (which close its sockets). */
+  /** Revoke a device and notify listeners (which close its sockets). Its push route goes with it. */
   async revokeDevice(deviceId: string): Promise<boolean> {
     const device = this.device(deviceId);
     if (device === undefined || device.revokedAt !== null) return false;
     device.revokedAt = this.clock.now();
+    delete device.push;
     await this.store.write(this.doc);
     for (const listener of this.revokedListeners) listener(device);
     return true;
@@ -110,6 +134,15 @@ export class HostState {
       this.lastSeenFlush = now;
       void this.store.write(this.doc).catch(() => {});
     }
+  }
+
+  /** Set or clear (`undefined`) a device's push route. */
+  async setPush(deviceId: string, push: PushRegistration | undefined): Promise<void> {
+    const device = this.device(deviceId);
+    if (device === undefined) return;
+    if (push === undefined) delete device.push;
+    else device.push = push;
+    await this.store.write(this.doc);
   }
 
   onDeviceRevoked(listener: Listener<DeviceRecord>): () => void {

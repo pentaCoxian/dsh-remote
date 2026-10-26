@@ -6,6 +6,7 @@ import {
   type HostSession,
   type PromptSubmission,
   type SessionAdapter,
+  type SessionObserver,
 } from '../core/adapter.ts';
 import type { HostState } from '../core/state.ts';
 import type { DshContext, DshPeer } from './types.ts';
@@ -117,6 +118,18 @@ export class DshAdapter implements SessionAdapter {
       }
     }
     this.ctx.remoteAccess.invalidate();
+  }
+
+  observe(listener: SessionObserver): () => void {
+    // The plugin's context is not agent-scoped, so it hears every session; subagent children are skipped.
+    const offEvent = this.ctx.on('session/event', (session, event) => {
+      if (session.header?.origin !== 'subagent') listener(session.id, event);
+    });
+    const offError = this.ctx.on('api-session/error', (sessionId, message) => listener(sessionId, { type: 'session/error', seq: -1, time: Date.now(), data: { message } }));
+    return () => {
+      offEvent();
+      offError();
+    };
   }
 
   dispose(): void {
