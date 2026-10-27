@@ -61,18 +61,30 @@ const reportDir = join(home, 'reports');
 mkdirSync(reportDir);
 const reportOptions = `--report-on-signal --report-directory=${reportDir}`;
 interface Handle { type: string; is_active: boolean; is_referenced: boolean; remoteEndpoint?: { host: string; port: number }; localEndpoint?: { host: string; port: number }; firesInMsFromNow?: number; repeat?: number; filename?: string; pid?: number }
+interface Report { header: { processId: number; threadId?: number; commandLine: string[] }; javascriptStack?: { message?: string; stack?: string[] }; libuv?: Handle[]; workers?: Report[] }
+// A referenced worker thread shows in its parent only as one `async` handle, so each
+// worker's own stack and handles are listed under it.
+const describe = (report: Report, indent: string): string => {
+  const handles = (report.libuv ?? []).filter((h) => h.is_active && h.is_referenced).map((h) => [
+    h.type,
+    h.localEndpoint && `local ${h.localEndpoint.host}:${h.localEndpoint.port}`,
+    h.remoteEndpoint && `remote ${h.remoteEndpoint.host}:${h.remoteEndpoint.port}`,
+    h.firesInMsFromNow !== undefined && `fires in ${h.firesInMsFromNow} ms${h.repeat ? `, every ${h.repeat} ms` : ''}`,
+    h.filename,
+    h.pid && `child ${h.pid}`,
+  ].filter(Boolean).join(' '));
+  // An idle thread reports "No stack." and "Unavailable.".
+  const stack = [report.javascriptStack?.message, ...(report.javascriptStack?.stack ?? []).slice(0, 6)].filter((line) => line !== undefined && !['', 'No stack.', 'Unavailable.'].includes(line.trim()));
+  return [
+    `${indent}stack: ${stack.length === 0 ? 'idle' : stack.join(`\n${indent}  `)}`,
+    `${indent}live handles: ${handles.join(' | ') || 'none'}`,
+    ...(report.workers ?? []).map((worker, i) => `${indent}worker thread ${worker.header.threadId ?? i + 1}:\n${describe(worker, `${indent}  `)}`),
+  ].join('\n');
+};
 const liveHandles = () =>
   (existsSync(reportDir) ? readdirSync(reportDir) : []).filter((name) => name.endsWith('.json')).map((name) => {
-    const report = JSON.parse(readFileSync(join(reportDir, name), 'utf8')) as { header: { processId: number; commandLine: string[] }; javascriptStack?: { message?: string }; libuv?: Handle[]; workers?: unknown[] };
-    const handles = (report.libuv ?? []).filter((h) => h.is_active && h.is_referenced).map((h) => [
-      h.type,
-      h.localEndpoint && `local ${h.localEndpoint.host}:${h.localEndpoint.port}`,
-      h.remoteEndpoint && `remote ${h.remoteEndpoint.host}:${h.remoteEndpoint.port}`,
-      h.firesInMsFromNow !== undefined && `fires in ${h.firesInMsFromNow} ms${h.repeat ? `, every ${h.repeat} ms` : ''}`,
-      h.filename,
-      h.pid && `child ${h.pid}`,
-    ].filter(Boolean).join(' '));
-    return `pid ${report.header.processId} ${report.header.commandLine.join(' ').slice(0, 160)}\n  stack: ${report.javascriptStack?.message ?? '?'}; worker threads: ${report.workers?.length ?? 0}\n  live handles: ${handles.join(' | ') || 'none'}`;
+    const report = JSON.parse(readFileSync(join(reportDir, name), 'utf8')) as Report;
+    return `pid ${report.header.processId} ${report.header.commandLine.join(' ').slice(0, 160)}\n${describe(report, '  ')}`;
   }).join('\n');
 const runInstaller = async (what: string, from = releaseDir) => {
   // Output to a file, not a pipe: a stray child holding a pipe would outlive the run.
