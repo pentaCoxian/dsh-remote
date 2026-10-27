@@ -91,7 +91,7 @@ function checkPnpm([command = 'pnpm', ...prefix]: readonly string[], env: NodeJS
   const answer = spawnSync(command, [...prefix, '--version'], { env, cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 60_000 });
   const version = /^(\d+)\.(\d+)\.\d+/.exec((answer.stdout ?? '').trim());
   if (version === null || Number(version[1]) !== 11 || Number(version[2]) >= 23) return;
-  throw new Error(`pnpm ${version[0]} can keep running after it finishes installing, and DSH would wait on it forever (fixed in pnpm 11.23.0). Update pnpm, for example with \`pnpm self-update 11\`, then run this again`);
+  throw new Error(`pnpm ${version[0]} can keep running after it finishes installing, and DSH would wait on it forever (fixed in pnpm 11.23.0). Update pnpm with \`pnpm self-update 11\` (or \`npm i -g pnpm@11\` if npm installed it), then run this again`);
 }
 
 /** The version of `name` the profile lists and has installed, if any. */
