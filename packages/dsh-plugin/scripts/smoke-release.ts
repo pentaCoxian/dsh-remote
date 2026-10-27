@@ -6,7 +6,7 @@
 // Web client module.
 //   node --conditions=source scripts/smoke-release.ts release/dsh-remote-dsh-plugin-<version>.tgz
 import { spawn, spawnSync } from 'node:child_process';
-import { chmodSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -44,7 +44,7 @@ const watchdog = setTimeout(() => {
 const profile = join(home, 'profiles', 'web');
 const dependencies = () => (JSON.parse(readFileSync(join(profile, 'package.json'), 'utf8')) as { dependencies: Record<string, string> }).dependencies;
 let runs = 0;
-/** This process's descendants of `pid`, as `ps` lists them: what a hung run is waiting on. */
+/** `pid` and its descendants, as `ps` lists them: what a hung run is waiting on. */
 const tree = (pid: number) => {
   const rows = spawnSync('ps', ['-A', '-o', 'pid=,ppid=,etime=,stat=,command='], { encoding: 'utf8' }).stdout.trim().split('\n').map((line) => line.trim().split(/\s+/));
   const wanted = new Set([String(pid)]);
@@ -52,24 +52,51 @@ const tree = (pid: number) => {
     size = wanted.size;
     for (const [child, parent] of rows) if (wanted.has(parent!)) wanted.add(child!);
   }
-  return rows.filter(([child]) => wanted.has(child!)).map((row) => row.join(' ').slice(0, 300)).join('\n');
+  const found = rows.filter(([child]) => wanted.has(child!));
+  return { pids: found.map(([child]) => Number(child)), text: found.map((row) => row.join(' ').slice(0, 300)).join('\n') };
 };
+// Every Node process of an installer run (install.mjs, dsh, pnpm) writes a diagnostic
+// report on SIGUSR2; a hung run's reports name the handles keeping its event loop alive.
+const reportDir = join(home, 'reports');
+mkdirSync(reportDir);
+const reportOptions = `--report-on-signal --report-directory=${reportDir}`;
+interface Handle { type: string; is_active: boolean; is_referenced: boolean; remoteEndpoint?: { host: string; port: number }; localEndpoint?: { host: string; port: number }; firesInMsFromNow?: number; repeat?: number; filename?: string; pid?: number }
+const liveHandles = () =>
+  (existsSync(reportDir) ? readdirSync(reportDir) : []).filter((name) => name.endsWith('.json')).map((name) => {
+    const report = JSON.parse(readFileSync(join(reportDir, name), 'utf8')) as { header: { processId: number; commandLine: string[] }; javascriptStack?: { message?: string }; libuv?: Handle[]; workers?: unknown[] };
+    const handles = (report.libuv ?? []).filter((h) => h.is_active && h.is_referenced).map((h) => [
+      h.type,
+      h.localEndpoint && `local ${h.localEndpoint.host}:${h.localEndpoint.port}`,
+      h.remoteEndpoint && `remote ${h.remoteEndpoint.host}:${h.remoteEndpoint.port}`,
+      h.firesInMsFromNow !== undefined && `fires in ${h.firesInMsFromNow} ms${h.repeat ? `, every ${h.repeat} ms` : ''}`,
+      h.filename,
+      h.pid && `child ${h.pid}`,
+    ].filter(Boolean).join(' '));
+    return `pid ${report.header.processId} ${report.header.commandLine.join(' ').slice(0, 160)}\n  stack: ${report.javascriptStack?.message ?? '?'}; worker threads: ${report.workers?.length ?? 0}\n  live handles: ${handles.join(' | ') || 'none'}`;
+  }).join('\n');
 const runInstaller = async (what: string, from = releaseDir) => {
   // Output to a file, not a pipe: a stray child holding a pipe would outlive the run.
   const output = join(home, `install-${(runs += 1)}.log`);
   const fd = openSync(output, 'w');
-  const child = spawn(process.execPath, [installer, '--from', from], { env, stdio: ['ignore', fd, fd] });
+  const child = spawn(process.execPath, [installer, '--from', from], { env: { ...env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} ${reportOptions}`.trim() }, stdio: ['ignore', fd, fd] });
   closeSync(fd);
-  let hung = '';
+  let hung: Promise<string> | undefined;
   const timer = setTimeout(() => {
-    hung = tree(child.pid!);
-    child.kill('SIGKILL');
-  }, 180_000);
+    hung = (async () => {
+      const stuck = tree(child.pid!);
+      for (const pid of stuck.pids) process.kill(pid, 'SIGUSR2');
+      await new Promise((done) => setTimeout(done, 3000));
+      const found = `${stuck.text}\n${liveHandles()}`;
+      for (const pid of stuck.pids) process.kill(pid, 'SIGKILL');
+      return found;
+    })();
+  }, Number(process.env.SMOKE_INSTALL_LIMIT_MS ?? 180_000));
   const status = await new Promise<number | null>((done) => child.once('exit', (code) => done(code)));
   clearTimeout(timer);
+  const stuck = hung === undefined ? '' : await hung;
   const text = readFileSync(output, 'utf8');
-  check(status === 0, `${what}${hung === '' ? '' : ' (still running after 3 minutes)'}`);
-  if (status !== 0) throw new Error(`install.mjs output:\n${text.slice(-4000)}${hung === '' ? '' : `\nprocesses at the time:\n${hung}`}`);
+  check(status === 0, `${what}${stuck === '' ? '' : ' (still running at the time limit)'}`);
+  if (status !== 0) throw new Error(`install.mjs output:\n${text.slice(-4000)}${stuck === '' ? '' : `\nprocesses at the time:\n${stuck}`}`);
   return text;
 };
 
