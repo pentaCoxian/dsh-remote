@@ -78,3 +78,57 @@ jobs:
       - name: Flutter tests, with the pipe end to end over FFI
         working-directory: apps/mobile
         run: DSHR_PIPE_LIB="$PWD/native/dshr_pipe/target/debug/libdshr_pipe.so" DSHR_FIXTURE_NODE="$(which node)" flutter test
+
+  android:
+    name: Android APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The build number is the commit count, as for TestFlight builds.
+          fetch-depth: 0
+      - run: |
+          rustup toolchain install stable --profile minimal && rustup default stable
+          rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/mobile/native/dshr_pipe
+          key: android
+      - run: cargo install cargo-ndk --version 4.1.2 --locked
+      - name: The pipe for each Android ABI
+        run: apps/mobile/native/build.sh android
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.29.2
+          channel: stable
+          cache: true
+      - name: Release APK, signed with the project's key
+        working-directory: apps/mobile
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            printf %s "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            export ANDROID_KEYSTORE="$RUNNER_TEMP/release.jks"
+          elif [ "$GITHUB_REF_TYPE" = tag ]; then
+            echo "::error::a release APK must be signed with the project's key (ANDROID_KEYSTORE_* secrets)"
+            exit 1
+          else
+            echo "::warning::no signing secrets (a fork's pull request?): this APK is signed with the runner's debug key"
+          fi
+          build=$(git rev-list --count HEAD)
+          version=$(sed -n 's/^version: *\([^+]*\).*/\1/p' pubspec.yaml)
+          flutter build apk --release --build-number "$build"
+          mkdir -p "$RUNNER_TEMP/apk"
+          mv build/app/outputs/flutter-apk/app-release.apk "$RUNNER_TEMP/apk/dsh-remote-$version-$build.apk"
+          rm -f "$RUNNER_TEMP/release.jks"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android-apk
+          path: ${{ runner.temp }}/apk/*.apk
+          retention-days: 14

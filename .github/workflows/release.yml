@@ -1,7 +1,8 @@
 name: Release
 
 # Push a tag like v0.1.0 (matching the plugin's package.json version) to publish the
-# installable plugin and the push gateway as release assets, after the full CI passes.
+# installable plugin, its installer, the push gateway and the Android APK as release
+# assets, after the full CI passes.
 on:
   push:
     tags: ['v*']
@@ -9,6 +10,8 @@ on:
 jobs:
   ci:
     uses: ./.github/workflows/ci.yml
+    # The Android job signs the APK with the ANDROID_KEYSTORE_* secrets.
+    secrets: inherit
 
   release:
     needs: ci
@@ -25,13 +28,19 @@ jobs:
         with:
           name: release-tarballs
           path: dist
+      - uses: actions/download-artifact@v8
+        with:
+          name: android-apk
+          path: dist/android
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" $(find dist -name '*.tgz' -o -name install.mjs) \
+          gh release create "$GITHUB_REF_NAME" $(find dist -name '*.tgz' -o -name install.mjs -o -name '*.apk') \
             --title "DSH Remote $GITHUB_REF_NAME" \
             --notes "Install or upgrade DSH Remote and dsh-mobile-maxxing in DSH (see docs/setup.md), then restart DSH:
           \`curl -fsSL https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/install.mjs | node --input-type=module -\`
 
-          It also repairs a profile set up with the v0.1.0 URL instructions. dsh-remote-push-gateway-*.tgz is the push gateway, for infra/push/deploy.sh."
+          It also repairs a profile set up with the v0.1.0 URL instructions. dsh-remote-push-gateway-*.tgz is the push gateway, for infra/push/deploy.sh.
+
+          dsh-remote-*.apk is the Android app (version-build), signed with the project's key so each release installs over the last."
