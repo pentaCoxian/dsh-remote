@@ -26,7 +26,7 @@ Setup: [docs/setup.md](docs/setup.md).
 
 ## Requirements
 
-- Node 24.9+ (`.nvmrc`) and pnpm 11
+- Node 24.9+ (`.nvmrc`) and pnpm 11.23+
 - Flutter 3.29+ for `apps/mobile`
 - On the host: DSH 0.2.1-rc.3 with [dsh-mobile-maxxing](https://github.com/kuraneko1/dsh-mobile-maxxing) 0.6.0+ next to the plugin, for DSH Web's phone layout (see [docs/setup.md](docs/setup.md))
 
