@@ -14,7 +14,7 @@ Pair only phones you control.
 | --- | --- |
 | Node 24.9+ | `node -v` (DSH refuses older versions) |
 | DSH 0.2.1-rc.3, the pinned version | `npm i -g @deepseek-ai/dsh@0.2.1-rc.3`, then `dsh --version` |
-| pnpm 11 (building from source) | `pnpm -v` |
+| pnpm 11.23+ (DSH installs plugins with it; 11.0 to 11.22 can keep running after an install, so the installer stops) | `pnpm -v`; update with `pnpm self-update 11` |
 | macOS on Apple silicon, or Linux x64/arm64 | `@number0/iroh` ships no Intel-Mac build |
 
 ## 1. Build and install the plugin

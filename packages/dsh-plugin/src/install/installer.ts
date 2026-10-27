@@ -28,6 +28,8 @@ export interface InstallOptions {
   readonly dshHome?: string;
   /** How to run DSH's CLI; default `dsh` on the PATH. */
   readonly dsh?: readonly string[];
+  /** How DSH runs pnpm, to check its version; default `pnpm` on the PATH. */
+  readonly pnpm?: readonly string[];
   /** A directory already holding the tarballs, instead of GitHub (tests, offline installs). */
   readonly from?: string;
   readonly log?: (line: string) => void;
@@ -55,8 +57,8 @@ export async function install(options: InstallOptions = {}): Promise<InstallResu
   const profileDir = join(home, 'profiles', profile);
   const repaired = repairProfile(profileDir, log);
 
-  // Only what changes goes to DSH: pnpm re-adding a tarball of the version already
-  // installed can stall after it finishes, and a newer dsh-mobile-maxxing is kept.
+  // Only what changes goes to DSH: an up-to-date profile is left alone, and a newer
+  // dsh-mobile-maxxing is kept.
   const files: string[] = [];
   if (installedVersion(profileDir, PLUGIN) !== plugin.version) files.push(plugin.file);
   const mobileUi = installedVersion(profileDir, MOBILE_UI.name);
@@ -66,14 +68,30 @@ export async function install(options: InstallOptions = {}): Promise<InstallResu
     return { version: plugin.version, files, repaired };
   }
 
+  const env = { ...process.env, DSH_HOME: home };
+  checkPnpm(options.pnpm ?? ['pnpm'], env, existsSync(profileDir) ? profileDir : home);
   const [command = 'dsh', ...prefix] = options.dsh ?? ['dsh'];
   log(`adding ${files.map((file) => basename(file, '.tgz')).join(' and ')} to the ${profile} profile`);
   // pnpm's progress goes straight to this terminal. No pipes: a process pnpm leaves
   // behind holding one open would keep spawnSync waiting after DSH has exited.
-  const add = spawnSync(command, [...prefix, 'plugin', '--profile', profile, 'add', ...files], { env: { ...process.env, DSH_HOME: home }, stdio: ['ignore', 'inherit', 'inherit'] });
+  const add = spawnSync(command, [...prefix, 'plugin', '--profile', profile, 'add', ...files], { env, stdio: ['ignore', 'inherit', 'inherit'] });
   if (add.error !== undefined) throw new Error(`cannot run ${command}: ${add.error.message} (is DSH installed? npm i -g @deepseek-ai/dsh)`);
   if (add.status !== 0) throw new Error(`dsh plugin add failed (${add.status ?? add.signal}); its output is above`);
   return { version: plugin.version, files, repaired };
+}
+
+/**
+ * pnpm 11.0 to 11.22 can keep running after an install, and DSH waits on it. pnpm
+ * fetches iroh's native packages for the other platforms in the background without
+ * waiting for them; one that reaches the store after pnpm has shut its worker pool
+ * down starts a new pool, and nothing shuts that one down. 11.23.0 reuses the shut
+ * pool. pnpm is asked where DSH runs it; a pnpm that cannot be asked is left to DSH.
+ */
+function checkPnpm([command = 'pnpm', ...prefix]: readonly string[], env: NodeJS.ProcessEnv, cwd: string): void {
+  const answer = spawnSync(command, [...prefix, '--version'], { env, cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 60_000 });
+  const version = /^(\d+)\.(\d+)\.\d+/.exec((answer.stdout ?? '').trim());
+  if (version === null || Number(version[1]) !== 11 || Number(version[2]) >= 23) return;
+  throw new Error(`pnpm ${version[0]} can keep running after it finishes installing, and DSH would wait on it forever (fixed in pnpm 11.23.0). Update pnpm, for example with \`pnpm self-update 11\`, then run this again`);
 }
 
 /** The version of `name` the profile lists and has installed, if any. */

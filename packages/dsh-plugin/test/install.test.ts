@@ -75,8 +75,14 @@ describe('installing from a local release directory', () => {
   /** A `dsh` that records its arguments instead of installing. */
   const recordingDsh = () => {
     const record = join(dir, 'dsh-args.json');
-    return { dsh: [process.execPath, '-e', `require('fs').writeFileSync(${JSON.stringify(record)}, JSON.stringify(process.argv.slice(1)))`], args: () => (existsSync(record) ? JSON.parse(readFileSync(record, 'utf8')) : undefined) };
+    return {
+      dsh: [process.execPath, '-e', `require('fs').writeFileSync(${JSON.stringify(record)}, JSON.stringify(process.argv.slice(1)))`],
+      args: () => (existsSync(record) ? JSON.parse(readFileSync(record, 'utf8')) : undefined),
+      clear: () => rmSync(record, { force: true }),
+    };
   };
+  /** A `pnpm` that only answers `--version`. */
+  const pnpmAt = (version: string) => [process.execPath, '-e', `console.log(${JSON.stringify(version)})`, '--'];
 
   it('leaves a profile that already has these versions alone', async () => {
     installedProfile({ [PLUGIN]: '0.1.10', [MOBILE_UI.name]: '0.6.0' });
@@ -89,9 +95,25 @@ describe('installing from a local release directory', () => {
   it('adds only the plugin when dsh-mobile-maxxing is already new enough, even newer than pinned', async () => {
     installedProfile({ [PLUGIN]: '0.1.9', [MOBILE_UI.name]: '0.7.0' });
     const fake = recordingDsh();
-    const result = await install({ from: release(), dshHome: join(dir, 'home'), dsh: fake.dsh });
+    const result = await install({ from: release(), dshHome: join(dir, 'home'), dsh: fake.dsh, pnpm: pnpmAt('11.28.8') });
     expect(result.files.map((file) => file.split('/').pop())).toEqual(['dsh-remote-dsh-plugin-0.1.10.tgz']);
     expect(fake.args()).toEqual(['plugin', '--profile', 'web', 'add', join(dir, 'home', 'plugin-tarballs', 'dsh-remote-dsh-plugin-0.1.10.tgz')]);
+  });
+
+  it('stops before DSH when its pnpm is one that keeps running after an install', async () => {
+    installedProfile({ [PLUGIN]: '0.1.9', [MOBILE_UI.name]: '0.6.0' });
+    const fake = recordingDsh();
+    const options = { from: release(), dshHome: join(dir, 'home'), dsh: fake.dsh };
+    for (const version of ['11.0.0', '11.5.0', '11.22.3']) {
+      await expect(install({ ...options, pnpm: pnpmAt(version) })).rejects.toThrow(`pnpm ${version} can keep running after it finishes installing`);
+      expect(fake.args()).toBeUndefined();
+    }
+    // Fixed, unaffected, or a pnpm it cannot ask (DSH then says pnpm is missing).
+    for (const pnpm of [pnpmAt('11.23.0'), pnpmAt('10.34.9'), pnpmAt('12.15.0'), [join(dir, 'no-such-pnpm')]]) {
+      fake.clear();
+      await install({ ...options, pnpm });
+      expect(fake.args()).toEqual(['plugin', '--profile', 'web', 'add', join(dir, 'home', 'plugin-tarballs', 'dsh-remote-dsh-plugin-0.1.10.tgz')]);
+    }
   });
 
   it('names the file it could not find', async () => {
