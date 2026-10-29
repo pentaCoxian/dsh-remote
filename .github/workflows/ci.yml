@@ -111,7 +111,17 @@ jobs:
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
         run: |
+          # The Firebase app config, without which the APK cannot receive notifications.
+          if [ -n "$GOOGLE_SERVICES_JSON_BASE64" ]; then
+            printf %s "$GOOGLE_SERVICES_JSON_BASE64" | base64 -d > android/app/google-services.json
+          elif [ "$GITHUB_REF_TYPE" = tag ]; then
+            echo "::error::a release APK needs Firebase for notifications (GOOGLE_SERVICES_JSON_BASE64 secret)"
+            exit 1
+          else
+            echo "::warning::no GOOGLE_SERVICES_JSON_BASE64 secret: this APK cannot receive notifications"
+          fi
           if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
             printf %s "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
             export ANDROID_KEYSTORE="$RUNNER_TEMP/release.jks"
