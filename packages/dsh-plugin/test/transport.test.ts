@@ -96,6 +96,20 @@ describe('the native API over iroh', () => {
     socket.ws.close();
   });
 
+  it('lets a phone dial again and again: each new connection replaces its stale one', async () => {
+    const ticket = live.host.endpoint!.ticket();
+    const secretKey = Array.from(crypto.getRandomValues(new Uint8Array(32)));
+    const phone = new TestPhone();
+    await pairOver(await dial(ticket, secretKey), phone);
+    // Each redial is a fresh endpoint with the same key (the network changed, the app came
+    // back), while the host still holds the last connection: more than the per-peer limit.
+    let latest: IrohDialer | undefined;
+    for (let i = 0; i < 5; i += 1) latest = await dial(ticket, secretKey);
+    const meta = await live.signed(phone, { method: 'GET', target: '/v1/meta', port: latest!.port });
+    expect(meta.status).toBe(200);
+    expect(live.host.status().transport!.connections).toBe(1);
+  });
+
   it('hangs up on the peer when its device is revoked', async () => {
     const dialer = await dial(live.host.endpoint!.ticket());
     const phone = new TestPhone();

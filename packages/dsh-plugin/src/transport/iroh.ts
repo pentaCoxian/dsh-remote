@@ -16,13 +16,18 @@ const HANDSHAKE_TIMEOUT_MS = 10_000;
 export interface TransportLimits {
   /** Live QUIC connections across all peers. */
   readonly maxConnections: number;
-  /** Live connections from one peer key (a phone keeps one, briefly two while reconnecting). */
+  /** Live connections from one peer key (a phone keeps one per ALPN). */
   readonly maxConnectionsPerPeer: number;
-  /** Concurrent bi-streams, i.e. HTTP connections, inside one QUIC connection. */
+  /** Concurrent bi-streams, i.e. HTTP connections, inside one API connection. */
   readonly maxStreamsPerConnection: number;
+  /**
+   * The same inside a DSH Web connection: a WebView keeps up to six HTTP/1.1
+   * connections and its WebSockets open, and reconnects before the old ones close.
+   */
+  readonly maxWebStreamsPerConnection: number;
 }
 
-const DEFAULT_LIMITS: TransportLimits = { maxConnections: 32, maxConnectionsPerPeer: 4, maxStreamsPerConnection: 16 };
+const DEFAULT_LIMITS: TransportLimits = { maxConnections: 32, maxConnectionsPerPeer: 4, maxStreamsPerConnection: 16, maxWebStreamsPerConnection: 64 };
 
 export interface IrohTransportOptions {
   /** The 32-byte Ed25519 seed (`HostKey.secretKeyBytes()`). */
@@ -167,11 +172,18 @@ export class IrohTransport {
       connection.close(3n, Array.from(Buffer.from('web window closed', 'utf8')));
       return;
     }
+    // A phone keeps one connection per ALPN, so a new one replaces the last: that one is
+    // dead (the network changed, the app came back) but has not reached its idle timeout.
+    for (const old of this.live) {
+      if (old.peerId !== peerId || old.web !== (web !== undefined)) continue;
+      this.live.delete(old);
+      old.connection.close(4n, Array.from(Buffer.from('replaced', 'utf8')));
+    }
     if ([...this.live].filter((live) => live.peerId === peerId).length >= this.limits.maxConnectionsPerPeer) {
       connection.close(2n, Array.from(Buffer.from('too many connections', 'utf8')));
       return;
     }
-    connection.setMaxConcurrentBiStreams(BigInt(this.limits.maxStreamsPerConnection));
+    connection.setMaxConcurrentBiStreams(BigInt(web === undefined ? this.limits.maxStreamsPerConnection : this.limits.maxWebStreamsPerConnection));
     const live: Live = { peerId, connection, streams: new Set(), web: web !== undefined };
     this.live.add(live);
     const peer: PeerIdentity = { peerId };
