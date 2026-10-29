@@ -36,6 +36,34 @@ const _embeddedStyle = '''
 })();
 ''';
 
+/// dsh-mobile-maxxing's "≈ N tok/s" label (up to 1.0.0) asks for the speed every
+/// 500 ms without waiting for the last answer. When the tunnel stalls (an app
+/// killed and reopened), the requests pile up, take all of the WebView's
+/// connections to the host, and DSH Web never connects again. This keeps one
+/// such request in flight, gives it 4 s, and hands its answer to the polls
+/// that arrive meanwhile.
+const _liveSpeedGuard = r'''
+(() => {
+  if (window.__dshRemoteLiveSpeed) return;
+  window.__dshRemoteLiveSpeed = true;
+  const original = window.fetch;
+  let inFlight = null;
+  window.fetch = function (input, init) {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input && input.url;
+    if (typeof url !== 'string' || !url.includes('/api/rdsh-mobile-ux/live-speed')) return original.apply(this, arguments);
+    if (inFlight === null) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 4000);
+      inFlight = original.call(this, input, { ...init, signal: controller.signal }).finally(() => {
+        clearTimeout(timer);
+        inFlight = null;
+      });
+    }
+    return inFlight.then((response) => response.clone());
+  };
+})();
+''';
+
 /// The colour of DSH Web's bottom edge, for the strip behind Android's navigation bar.
 const _bottomColor = r'''
 (() => {
@@ -232,6 +260,7 @@ class _WebScreenState extends ConsumerState<WebScreen> {
       },
       onPageStarted: (_) => mounted ? setState(() => _loading = true) : null,
       onPageFinished: (_) {
+        unawaited(controller.runJavaScript(_liveSpeedGuard).catchError((_) {}));
         unawaited(controller.runJavaScript(_embeddedStyle).catchError((_) {}));
         if (mounted) setState(() => _loading = false);
         // DSH Web paints its theme a moment after the load.
