@@ -1,6 +1,6 @@
 {
   "name": "@dsh-remote/dsh-plugin",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "private": true,
   "type": "module",
   "description": "DSH Remote: continue a DeepSeek Harness session from the native phone app over an end-to-end encrypted iroh connection",
