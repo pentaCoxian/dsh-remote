@@ -31,7 +31,8 @@ android {
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         // The iroh pipe (native/dshr_pipe) uses getifaddrs, Android 7.0+.
         minSdk = maxOf(24, flutter.minSdkVersion)
-        targetSdk = flutter.targetSdkVersion
+        // Google Play takes new apps and updates only at API 36 or later (since 2026-08-31).
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         // The ABIs native/build.sh builds the iroh pipe for.
