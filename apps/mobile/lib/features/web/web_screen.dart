@@ -315,11 +315,14 @@ class _WebScreenState extends ConsumerState<WebScreen> {
         body: android ? SafeArea(top: false, child: page) : page,
       ),
     );
-    if (strip == null) return screen;
-    // The bar's icons stay readable on a dark page as on a light one.
-    final icons = strip.computeLuminance() > 0.5 ? Brightness.dark : Brightness.light;
+    // Always wrapped, so the page colour arriving does not change the tree's
+    // shape: a rebuilt subtree re-creates the WebView's platform view.
+    final style = overlayStyle(Theme.of(context).brightness);
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: overlayStyle(Theme.of(context).brightness).copyWith(systemNavigationBarColor: strip, systemNavigationBarIconBrightness: icons),
+      value: strip == null
+          ? style
+          // The bar's icons stay readable on a dark page as on a light one.
+          : style.copyWith(systemNavigationBarColor: strip, systemNavigationBarIconBrightness: strip.computeLuminance() > 0.5 ? Brightness.dark : Brightness.light),
       child: screen,
     );
   }

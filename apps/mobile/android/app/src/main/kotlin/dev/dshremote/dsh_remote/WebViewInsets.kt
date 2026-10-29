@@ -21,15 +21,22 @@ class WebViewInsets(private val engine: FlutterEngine) : MethodChannel.MethodCal
         if (call.method != "fitToPosition") return result.notImplemented()
         val id = call.argument<Number>("id")?.toLong() ?: return result.error("ARGS", "id is required", null)
         val webView = WebViewFlutterAndroidExternalApi.getWebView(engine, id) ?: return result.error("NO_WEBVIEW", "no WebView $id", null)
-        ViewCompat.setOnApplyWindowInsetsListener(webView) { view, insets -> ViewCompat.onApplyWindowInsets(view, overlapping(view, insets)) }
-        // Flutter moves the view that holds the WebView, not the WebView itself: watch where it lands.
-        var placed = Pair(-1, -1)
+        // Insets arrive before layout, so they can be computed at a place the
+        // WebView is about to leave: Flutter moves the view that holds it, and a
+        // re-created platform view hands the WebView over to a new one that
+        // starts at the top of the window. Once laid out somewhere else, ask
+        // again (once per place, in case they never reach the WebView).
+        var computedAt: Pair<Int, Int>? = null
+        var askedAt: Pair<Int, Int>? = null
+        ViewCompat.setOnApplyWindowInsetsListener(webView) { view, insets ->
+            computedAt = placement(view)
+            askedAt = null
+            ViewCompat.onApplyWindowInsets(view, overlapping(view, insets))
+        }
         webView.viewTreeObserver.addOnGlobalLayoutListener {
-            val location = IntArray(2)
-            webView.getLocationInWindow(location)
-            val now = Pair(location[1], webView.height)
-            if (now != placed) {
-                placed = now
+            val now = placement(webView)
+            if (now != computedAt && now != askedAt) {
+                askedAt = now
                 ViewCompat.requestApplyInsets(webView)
             }
         }
@@ -37,14 +44,19 @@ class WebViewInsets(private val engine: FlutterEngine) : MethodChannel.MethodCal
         result.success(null)
     }
 
+    /** The WebView's top in the window, and its height. */
+    private fun placement(view: View): Pair<Int, Int> {
+        val location = IntArray(2)
+        view.getLocationInWindow(location)
+        return Pair(location[1], view.height)
+    }
+
     private fun overlapping(view: View, insets: WindowInsetsCompat): WindowInsetsCompat {
         val types = WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
         val edges = insets.getInsets(types)
-        val location = IntArray(2)
-        view.getLocationInWindow(location)
-        val windowHeight = view.rootView.height
-        val top = maxOf(0, edges.top - location[1])
-        val bottom = maxOf(0, edges.bottom - (windowHeight - location[1] - view.height))
+        val (y, height) = placement(view)
+        val top = maxOf(0, edges.top - y)
+        val bottom = maxOf(0, edges.bottom - (view.rootView.height - y - height))
         return WindowInsetsCompat.Builder(insets)
             .setInsets(types, Insets.of(edges.left, top, edges.right, bottom))
             .setDisplayCutout(if (top == edges.top) insets.displayCutout else null)
