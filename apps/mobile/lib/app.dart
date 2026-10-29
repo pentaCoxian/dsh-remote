@@ -86,7 +86,9 @@ class _LifecycleState extends ConsumerState<_Lifecycle> {
     );
     // Android reports network changes from the platform side (MainActivity); iOS iroh sees them itself.
     const MethodChannel('dev.dshremote/network').setMethodCallHandler((call) async {
-      if (call.method == 'changed') await ref.read(pipeManagerProvider).networkChanged();
+      if (call.method != 'changed') return;
+      await ref.read(pipeManagerProvider).networkChanged();
+      ref.read(networkChangesProvider.notifier).state++;
     });
   }
 

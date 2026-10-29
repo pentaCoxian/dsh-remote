@@ -67,15 +67,29 @@ class _WebScreenState extends ConsumerState<WebScreen> {
     // The app closes the tunnel when backgrounded (app.dart); reopen it on return.
     _lifecycle = AppLifecycleListener(onHide: () => _signalPage(online: false), onResume: () => unawaited(_connect()));
     unawaited(_connect());
-    // DSH Web shows its own reconnecting state; keep this app's dot honest too.
-    _watch = Timer.periodic(const Duration(seconds: 10), (_) => unawaited(_checkLink()));
+    _watch = Timer.periodic(const Duration(seconds: 5), (_) => unawaited(_checkLink()));
+    ref.listenManual(networkChangesProvider, (_, __) => unawaited(_checkLink()));
   }
 
+  /// Keeps the tunnel up while DSH Web is open. DSH Web retries on its own, but
+  /// its retries cannot reopen this phone's window or redial a host that was
+  /// down, so when the tunnel's connection is gone (or the first open failed)
+  /// this reopens it quietly, and DSH Web reconnects as soon as it is back.
   Future<void> _checkLink() async {
-    if (_connecting || _port == null) return;
+    if (_connecting) return;
+    final link = ref.read(linkStateProvider(_hostId));
+    if (link == LinkState.revoked || link == LinkState.outdated) return;
+    if (_port == null) {
+      if (_error != null) await _connect(quiet: true);
+      return;
+    }
     final status = await ref.read(pipeManagerProvider).status(_hostId).catchError((_) => const PipeStatus(connected: false, paths: []));
-    if (!mounted || ref.read(linkStateProvider(_hostId)) == LinkState.revoked) return;
-    _link(status.connected ? LinkState.online : LinkState.offline);
+    if (!mounted || _connecting) return;
+    if (status.webConnected == true) {
+      _link(LinkState.online);
+    } else {
+      await _connect(quiet: true);
+    }
   }
 
   @override
@@ -88,11 +102,15 @@ class _WebScreenState extends ConsumerState<WebScreen> {
 
   void _link(LinkState state) => ref.read(linkStateProvider(_hostId).notifier).state = state;
 
-  Future<void> _connect() async {
+  /// Opens (or reopens) this phone's DSH Web window and its tunnel. A [quiet]
+  /// retry leaves the page and any notice as they are unless it succeeds.
+  Future<void> _connect({bool quiet = false}) async {
     if (_connecting) return;
     _connecting = true;
-    setState(() => _error = null);
-    _link(LinkState.connecting);
+    if (!quiet) {
+      setState(() => _error = null);
+      _link(LinkState.connecting);
+    }
     try {
       final session = ref.read(hostSessionProvider(_hostId));
       if (session == null) throw const ApiException(status: 403, code: 'DEVICE_REVOKED', message: 'not paired');
@@ -102,6 +120,7 @@ class _WebScreenState extends ConsumerState<WebScreen> {
       final port = await ref.read(pipeManagerProvider).openWeb(_hostId, () => host?.ticket ?? session.host.ticket);
       if (!mounted) return;
       _link(LinkState.online);
+      if (_error != null) setState(() => _error = null);
       // A new port is a new origin: DSH needs a fresh login there. The same port keeps the page.
       if (_controller == null || port != _port) {
         _port = port;
@@ -117,7 +136,7 @@ class _WebScreenState extends ConsumerState<WebScreen> {
       }
       unawaited(refreshTicket(ref, _hostId));
       // Keep this host able to notify the phone (asks for the OS permission the first time).
-      unawaited(ref.read(pushRegistrarProvider).sync(session, ask: true).then((_) {}, onError: (_) {}));
+      if (!quiet) unawaited(ref.read(pushRegistrarProvider).sync(session, ask: true).then((_) {}, onError: (_) {}));
     } on ApiException catch (error) {
       if (error.deviceGone) {
         _link(LinkState.revoked);
@@ -125,14 +144,14 @@ class _WebScreenState extends ConsumerState<WebScreen> {
       } else {
         _link(error.code == 'PROTOCOL_UNSUPPORTED' ? LinkState.outdated : LinkState.offline);
       }
-      if (mounted) setState(() => _error = describeError(error));
+      if (mounted && (!quiet || error.deviceGone)) setState(() => _error = describeError(error));
     } on PipeException catch (error) {
       _link(LinkState.offline);
-      if (mounted) setState(() => _error = error.describe);
+      if (mounted && !quiet) setState(() => _error = error.describe);
     } catch (error) {
       // Never leave the screen spinning on an unexpected failure.
       _link(LinkState.offline);
-      if (mounted) setState(() => _error = 'Could not open DSH Web: $error');
+      if (mounted && !quiet) setState(() => _error = 'Could not open DSH Web: $error');
     } finally {
       _connecting = false;
     }
@@ -182,6 +201,12 @@ class _WebScreenState extends ConsumerState<WebScreen> {
     return controller;
   }
 
+  /// Reload the page, reopening the window first: a host that lost it would refuse the reload.
+  Future<void> _reload() async {
+    await _connect(quiet: true);
+    await _controller?.reload();
+  }
+
   Future<void> _back() async {
     final controller = _controller;
     if (controller != null && await controller.canGoBack()) {
@@ -212,7 +237,7 @@ class _WebScreenState extends ConsumerState<WebScreen> {
             Flexible(child: Text(host?.name ?? 'DSH', overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600))),
           ]),
           actions: [
-            IconButton(tooltip: 'Reload', icon: const Icon(LucideIcons.rotateCw, size: 18), onPressed: controller == null ? _connect : () => controller.reload()),
+            IconButton(tooltip: 'Reload', icon: const Icon(LucideIcons.rotateCw, size: 18), onPressed: controller == null ? _connect : _reload),
             IconButton(tooltip: 'Connection and host settings', icon: const Icon(LucideIcons.settings2, size: 18), onPressed: () => context.push('/host/$_hostId/settings')),
           ],
         ),

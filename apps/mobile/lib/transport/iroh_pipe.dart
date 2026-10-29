@@ -41,13 +41,16 @@ class PipePath {
 
 /// Connection details for the connection sheet.
 class PipeStatus {
-  const PipeStatus({required this.connected, required this.paths, this.remoteId, this.homeRelay, this.webPort});
+  const PipeStatus({required this.connected, required this.paths, this.remoteId, this.homeRelay, this.webPort, this.webConnected});
   final bool connected;
   final List<PipePath> paths;
   final String? remoteId;
 
   /// The DSH Web tunnel's local port while it is open.
   final int? webPort;
+
+  /// Whether the DSH Web tunnel's own connection is up; null without a tunnel.
+  final bool? webConnected;
 
   /// This phone's own home relay.
   final String? homeRelay;
@@ -59,6 +62,7 @@ class PipeStatus {
         remoteId: json['remoteId'] as String?,
         homeRelay: json['homeRelay'] as String?,
         webPort: (json['webPort'] as num?)?.toInt(),
+        webConnected: json['web'] is Map ? (json['web'] as Map)['connected'] == true : null,
         paths: [
           for (final p in (json['paths'] as List? ?? const []).cast<Map<String, dynamic>>())
             PipePath(relay: p['relay'] == true, selected: p['selected'] == true, rttMs: (p['rttMs'] as num?)?.toInt() ?? 0),

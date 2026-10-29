@@ -56,6 +56,9 @@ PairedHost? _host(Ref ref, String hostId) => ref.read(hostsProvider).valueOrNull
 
 final linkStateProvider = StateProvider.family<LinkState, String>((_, __) => LinkState.connecting);
 
+/// Counts the phone's network changes (Android reports them; iroh sees iOS's itself).
+final networkChangesProvider = StateProvider<int>((_) => 0);
+
 /// The signed API of one host. Rebuilt only when its identity changes: a
 /// refreshed ticket goes to the open pipe without tearing the session down.
 final hostSessionProvider = Provider.family<HostSession?, String>((ref, hostId) {
