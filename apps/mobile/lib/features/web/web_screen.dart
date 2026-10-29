@@ -93,7 +93,7 @@ class _WebScreenState extends ConsumerState<WebScreen> {
   /// down, so when the tunnel's connection is gone (or the first open failed)
   /// this reopens it quietly, and DSH Web reconnects as soon as it is back.
   Future<void> _checkLink() async {
-    if (_connecting) return;
+    if (_connecting || !_inForeground) return;
     final link = ref.read(linkStateProvider(_hostId));
     if (link == LinkState.revoked || link == LinkState.outdated) return;
     if (_port == null) {
@@ -120,6 +120,14 @@ class _WebScreenState extends ConsumerState<WebScreen> {
 
   void _link(LinkState state) => ref.read(linkStateProvider(_hostId).notifier).state = state;
 
+  /// The tunnel stays closed in the background (app.dart): while it is open the
+  /// host counts the phone as present and sends it no notifications. Android
+  /// keeps the app running there, timers included.
+  bool get _inForeground {
+    final state = WidgetsBinding.instance.lifecycleState;
+    return state == null || state == AppLifecycleState.resumed || state == AppLifecycleState.inactive;
+  }
+
   /// Opens (or reopens) this phone's DSH Web window and its tunnel. A [quiet]
   /// retry leaves the page and any notice as they are unless it succeeds.
   Future<void> _connect({bool quiet = false}) async {
@@ -137,6 +145,11 @@ class _WebScreenState extends ConsumerState<WebScreen> {
       final host = ref.read(hostsProvider).valueOrNull?.where((h) => h.hostId == _hostId).firstOrNull;
       final port = await ref.read(pipeManagerProvider).openWeb(_hostId, () => host?.ticket ?? session.host.ticket);
       if (!mounted) return;
+      if (!_inForeground) {
+        // The app left while this was opening: close it again; the return reopens it.
+        unawaited(ref.read(pipeManagerProvider).closeWeb(_hostId));
+        return;
+      }
       _link(LinkState.online);
       if (_error != null) setState(() => _error = null);
       // A new port is a new origin: DSH needs a fresh login there. The same port keeps the page.
