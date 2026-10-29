@@ -55,7 +55,7 @@ describe('installing from a local release directory', () => {
   it('picks the newest plugin by number, or the version asked for', async () => {
     const from = release();
     // A stand-in dsh-mobile-maxxing fails its checksum, so nothing reaches DSH; the plugin was already chosen.
-    writeFileSync(join(from, 'dsh-mobile-maxxing-0.6.0.tgz'), 'not the release');
+    writeFileSync(join(from, `dsh-mobile-maxxing-${MOBILE_UI.version}.tgz`), 'not the release');
     const home = join(dir, 'home');
     await expect(install({ from, dshHome: home, dsh: ['false'] })).rejects.toThrow(/does not match its published SHA-256/);
     expect(readdirSync(join(home, 'plugin-tarballs'))).toEqual(['dsh-remote-dsh-plugin-0.1.10.tgz']);
@@ -85,7 +85,7 @@ describe('installing from a local release directory', () => {
   const pnpmAt = (version: string) => [process.execPath, '-e', `console.log(${JSON.stringify(version)})`, '--'];
 
   it('leaves a profile that already has these versions alone', async () => {
-    installedProfile({ [PLUGIN]: '0.1.10', [MOBILE_UI.name]: '0.6.0' });
+    installedProfile({ [PLUGIN]: '0.1.10', [MOBILE_UI.name]: MOBILE_UI.version });
     const fake = recordingDsh();
     const result = await install({ from: release(), dshHome: join(dir, 'home'), dsh: fake.dsh });
     expect(result).toMatchObject({ version: '0.1.10', files: [] });
@@ -93,15 +93,26 @@ describe('installing from a local release directory', () => {
   });
 
   it('adds only the plugin when dsh-mobile-maxxing is already new enough, even newer than pinned', async () => {
-    installedProfile({ [PLUGIN]: '0.1.9', [MOBILE_UI.name]: '0.7.0' });
+    installedProfile({ [PLUGIN]: '0.1.9', [MOBILE_UI.name]: '1.2.0' });
     const fake = recordingDsh();
     const result = await install({ from: release(), dshHome: join(dir, 'home'), dsh: fake.dsh, pnpm: pnpmAt('11.28.8') });
     expect(result.files.map((file) => file.split('/').pop())).toEqual(['dsh-remote-dsh-plugin-0.1.10.tgz']);
     expect(fake.args()).toEqual(['plugin', '--profile', 'web', 'add', join(dir, 'home', 'plugin-tarballs', 'dsh-remote-dsh-plugin-0.1.10.tgz')]);
   });
 
+  it('brings an older dsh-mobile-maxxing up to the tested release', async () => {
+    // The oldest it works with is still older than the tested release.
+    installedProfile({ [PLUGIN]: '0.1.10', [MOBILE_UI.name]: MOBILE_UI.minVersion });
+    const from = release();
+    // A stand-in fails its checksum, which shows the tested release was the one chosen.
+    writeFileSync(join(from, `dsh-mobile-maxxing-${MOBILE_UI.version}.tgz`), 'not the release');
+    const fake = recordingDsh();
+    await expect(install({ from, dshHome: join(dir, 'home'), dsh: fake.dsh })).rejects.toThrow(`dsh-mobile-maxxing-${MOBILE_UI.version}.tgz does not match its published SHA-256`);
+    expect(fake.args()).toBeUndefined();
+  });
+
   it('stops before DSH when its pnpm is one that keeps running after an install', async () => {
-    installedProfile({ [PLUGIN]: '0.1.9', [MOBILE_UI.name]: '0.6.0' });
+    installedProfile({ [PLUGIN]: '0.1.9', [MOBILE_UI.name]: MOBILE_UI.version });
     const fake = recordingDsh();
     const options = { from: release(), dshHome: join(dir, 'home'), dsh: fake.dsh };
     for (const version of ['11.0.0', '11.5.0', '11.22.3']) {

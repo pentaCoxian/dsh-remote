@@ -7,15 +7,18 @@ import { dirname, join } from 'node:path';
  * loads only the plugins its profile lists itself, so it is installed next to
  * DSH Remote rather than as a dependency; this checks that it is there.
  */
-const TARBALL = 'https://github.com/kuraneko1/dsh-mobile-maxxing/releases/download/v0.6.0/dsh-mobile-maxxing-0.6.0.tgz';
+const VERSION = '1.0.0';
 
 export const MOBILE_UI = {
   name: 'dsh-mobile-maxxing',
+  /** The oldest release whose phone layout DSH Remote works with. */
   minVersion: '0.6.0',
-  /** The tested release; a versioned URL, because pnpm caches by URL. */
-  tarball: TARBALL,
+  /** The tested release: the installer brings older ones up to it and keeps newer ones. */
+  version: VERSION,
+  /** That release; a versioned URL, because pnpm caches by URL. */
+  tarball: `https://github.com/kuraneko1/dsh-mobile-maxxing/releases/download/v${VERSION}/dsh-mobile-maxxing-${VERSION}.tgz`,
   /** SHA-256 of that tarball, checked by the installer before DSH sees it. */
-  sha256: '7d8888c56649cfd0ef96cc81853c14c6dedc6237ce6aae681c082f0c43f02dde',
+  sha256: '50d151efb86367c8200b7fd861fa05c0929541d1b67d48bb96dc82ffa70b9adc',
   /** Installs it from a checked local copy: a URL install would break later pnpm installs. */
   install: 'run `dsh-remote upgrade`',
 } as const;

@@ -33,14 +33,15 @@ curl -fsSL https://github.com/pentaCoxian/dsh-remote/releases/latest/download/in
   then refuses every later install in that profile (`ERR_PNPM_MISSING_TARBALL_INTEGRITY`). The
   0.1.0 instructions did that; the installer repairs such a profile before adding the files.
 - **Upgrade later:** `dsh-remote upgrade [version]` does the same, or rerun the line above. It hands DSH
-  only what changes: nothing when the profile is up to date, and a newer dsh-mobile-maxxing is kept.
+  only what changes: nothing when the profile is up to date. An older dsh-mobile-maxxing is brought
+  up to the tested release, and a newer one is kept.
 
 Or from source:
 
 ```sh
 pnpm install
 pnpm -r build
-dsh plugin --profile web add "$PWD/packages/dsh-plugin" ~/.dsh/plugin-tarballs/dsh-mobile-maxxing-0.6.0.tgz
+dsh plugin --profile web add "$PWD/packages/dsh-plugin" ~/.dsh/plugin-tarballs/dsh-mobile-maxxing-1.0.0.tgz
 ```
 
 (The installer above leaves that dsh-mobile-maxxing file there.)
@@ -48,10 +49,14 @@ dsh plugin --profile web add "$PWD/packages/dsh-plugin" ~/.dsh/plugin-tarballs/d
 Then restart DSH.
 
 DSH Remote requires [dsh-mobile-maxxing](https://github.com/kuraneko1/dsh-mobile-maxxing) (MIT),
-version 0.6.0 or later, which gives DSH Web its phone layout.
+which gives DSH Web its phone layout. The installer adds 1.0.0, the tested release; 0.6.0 or later
+works.
 - **Why a separate install:** DSH loads only the plugins its profile lists itself, so it is added
   next to DSH Remote rather than coming as a dependency.
-- **If it is missing:** `/rc status`, `dsh-remote doctor` and the app all say so.
+- **If it is missing:** `/rc status`, `dsh-remote doctor` and the app all say so. `doctor` also
+  warns when it is older than the tested release.
+- **Its own updates:** its Updates tab in DSH Web's settings (phones only, the app included)
+  installs newer releases from GitHub. `dsh-remote upgrade` keeps them.
 - **Its own notifications:** its Web Push reaches browsers and installed PWAs. Inside the app's
   WebView it stays quiet; the app gets DSH Remote's own end-to-end encrypted notifications.
 

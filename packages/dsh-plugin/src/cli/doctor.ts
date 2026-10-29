@@ -3,6 +3,7 @@ import { statSync } from 'node:fs';
 import { join } from 'node:path';
 import iroh from '@number0/iroh';
 import { AdminClient } from '../admin/socket.ts';
+import { compareVersions, MOBILE_UI } from '../dsh/mobile-ui.ts';
 import { stateDir } from '../dsh/plugin.ts';
 import type { HostStatus } from '../host.ts';
 import { ALPN } from '../transport/iroh.ts';
@@ -68,7 +69,10 @@ export async function runDoctor(_args: string[]): Promise<number> {
   }
 
   if (status?.mobileUi != null) {
-    report(status.mobileUi.ok ? 'pass' : 'fail', status.mobileUi.ok ? `DSH Web has its phone layout (dsh-mobile-maxxing ${status.mobileUi.version})` : status.mobileUi.problem!);
+    const { ok, version, problem } = status.mobileUi;
+    if (!ok) report('fail', problem!);
+    else if (compareVersions(version!, MOBILE_UI.version) < 0) report('warn', `DSH Web has its phone layout from dsh-mobile-maxxing ${version}; ${MOBILE_UI.version} is the tested release: ${MOBILE_UI.install}`);
+    else report('pass', `DSH Web has its phone layout (dsh-mobile-maxxing ${version})`);
   }
 
   report(serviceEnabled() ? 'pass' : 'warn', serviceEnabled() ? 'DSH host service is installed' : 'no supervised DSH host service found (deployment/install.mjs)');

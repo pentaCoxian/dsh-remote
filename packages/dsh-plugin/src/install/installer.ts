@@ -57,12 +57,13 @@ export async function install(options: InstallOptions = {}): Promise<InstallResu
   const profileDir = join(home, 'profiles', profile);
   const repaired = repairProfile(profileDir, log);
 
-  // Only what changes goes to DSH: an up-to-date profile is left alone, and a newer
-  // dsh-mobile-maxxing is kept.
+  // Only what changes goes to DSH: an up-to-date profile is left alone, an older
+  // dsh-mobile-maxxing is brought up to the tested release, and a newer one is kept
+  // (its own Update tab installs releases from GitHub).
   const files: string[] = [];
   if (installedVersion(profileDir, PLUGIN) !== plugin.version) files.push(plugin.file);
   const mobileUi = installedVersion(profileDir, MOBILE_UI.name);
-  if (mobileUi === undefined || compareVersions(mobileUi, MOBILE_UI.minVersion) < 0) files.push(await mobileUiTarball(dir, options.from, log));
+  if (mobileUi === undefined || compareVersions(mobileUi, MOBILE_UI.version) < 0) files.push(await mobileUiTarball(dir, options.from, log));
   if (files.length === 0) {
     log(`DSH Remote ${plugin.version} and ${MOBILE_UI.name} ${mobileUi} are already installed in the ${profile} profile`);
     return { version: plugin.version, files, repaired };

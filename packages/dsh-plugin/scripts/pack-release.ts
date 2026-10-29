@@ -65,7 +65,7 @@ curl -fsSL https://github.com/pentaCoxian/dsh-remote/releases/download/v${pkg.ve
 \`\`\`
 
 Then restart DSH and send \`/rc\` in DSH Web to pair a phone. The installer also adds
-dsh-mobile-maxxing ${MOBILE_UI.minVersion} (DSH Web's phone layout), which DSH Remote requires; \`dsh-remote upgrade\`
+dsh-mobile-maxxing ${MOBILE_UI.version} (DSH Web's phone layout), which DSH Remote requires; \`dsh-remote upgrade\`
 updates both, and \`dsh-remote doctor\` checks the setup.
 `);
 for (const name of external) if (pkg.dependencies[name] === undefined) throw new Error(`${name} is not a dependency of the plugin`);
