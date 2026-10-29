@@ -1,0 +1,21 @@
+{
+  "unit": { "name": "workspace", "version": 2 },
+  "global": {
+    "initialized": true,
+    "workspaceIds": ["0f3c7a52-6d1e-4b8a-9c4e-2a7d51e0b9f3"],
+    "archivedSessionIds": [],
+    "pinnedSessionIds": [],
+    "defaultWorkspaceId": "0f3c7a52-6d1e-4b8a-9c4e-2a7d51e0b9f3"
+  },
+  "tables": {
+    "workspaces": {
+      "0f3c7a52-6d1e-4b8a-9c4e-2a7d51e0b9f3": {
+        "path": "/home/review/Documents/deepseek-harness/default-workspace",
+        "title": "Review workspace",
+        "sessionIds": [],
+        "createdAt": "2026-10-29T00:00:00.000Z",
+        "updatedAt": "2026-10-29T00:00:00.000Z"
+      }
+    }
+  }
+}

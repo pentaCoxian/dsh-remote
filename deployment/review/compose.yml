@@ -1,0 +1,33 @@
+# The review host behind Caddy's automatic HTTPS (README.md):
+#   REVIEW_DOMAIN=review.example.org REVIEW_TOKEN=<secret> docker compose up -d --build
+services:
+  review:
+    build: .
+    restart: unless-stopped
+    environment:
+      REVIEW_TOKEN: ${REVIEW_TOKEN:?set REVIEW_TOKEN}
+    volumes:
+      - home:/home/review
+    # Only its home is writable, it cannot gain privileges, and it has limits.
+    read_only: true
+    tmpfs:
+      # exec: DSH's add-on loader copies its native binaries here before loading them.
+      - /tmp:exec
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 512
+    mem_limit: 2g
+    cpus: 2
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    command: caddy reverse-proxy --from ${REVIEW_DOMAIN:?set REVIEW_DOMAIN} --to review:8080
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy:/data
+volumes:
+  home:
+  caddy:

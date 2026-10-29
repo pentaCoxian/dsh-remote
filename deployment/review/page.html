@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>DSH Remote review host</title>
+<style>
+  :root { --bg: #ffffff; --text: #111318; --muted: #5b6270; --line: #e4e7ec; --accent: #4d6bfe; --card: #f7f8fa; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #111318; --text: #f2f4f7; --muted: #9aa1ad; --line: #2a2f38; --accent: #7b91ff; --card: #1a1d24; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 32px 16px 48px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .lede { color: var(--muted); margin: 0 0 24px; }
+  .code { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 24px 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--card); }
+  .qr { width: min(280px, 100%); aspect-ratio: 1; background: #fff; border-radius: 12px; padding: 12px; display: grid; place-items: center; color: #5b6270; text-align: center; }
+  .qr svg { width: 100%; height: 100%; }
+  .status { color: var(--muted); font-size: 14px; margin: 0; }
+  .open { display: inline-block; padding: 10px 18px; border-radius: 999px; background: var(--text); color: var(--bg); text-decoration: none; font-weight: 600; }
+  ol { padding-left: 20px; }
+  li { margin: 6px 0; }
+  code { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>DSH Remote review host</h1>
+  <p class="lede">A DeepSeek Harness host set up for App Review. It runs a scripted model and approves every phone that scans the code below.</p>
+
+  <section class="code" aria-live="polite">
+    <div class="qr" id="qr">Getting a pairing code…</div>
+    <p class="status" id="status"></p>
+    <a class="open" id="open" href="#" hidden>Open in DSH Remote</a>
+  </section>
+
+  <h2>Pair</h2>
+  <ol>
+    <li>Open DSH Remote on the iPhone and tap <strong>Connect host</strong>, then scan the code above. On the iPhone itself, tap <strong>Open in DSH Remote</strong> instead.</li>
+    <li>Allow the camera when asked. The phone is approved automatically within a second.</li>
+    <li>Tap <strong>DSH Remote review host</strong> in the list. DSH Web opens; allow notifications when asked.</li>
+  </ol>
+
+  <h2>Try</h2>
+  <ol>
+    <li>Send any message: the scripted model explains what it is.</li>
+    <li>Send <code>please use a tool</code>: the tool call waits for your approval in DSH Web.</li>
+    <li>Send <code>notify me</code>, then leave the app. About 45 seconds later an <strong>Approval needed</strong> notification arrives; tapping it opens the host again.</li>
+  </ol>
+</main>
+<script>
+  const offerUrl = location.pathname.replace(/\/?$/, '/') + 'offer';
+  const qr = document.getElementById('qr');
+  const status = document.getElementById('status');
+  const open = document.getElementById('open');
+  let timer;
+  async function refresh() {
+    clearTimeout(timer);
+    try {
+      const reply = await fetch(offerUrl, { cache: 'no-store' });
+      const body = await reply.json();
+      if (!reply.ok) throw new Error(body.error || reply.statusText);
+      qr.innerHTML = body.svg;
+      open.href = body.url;
+      open.hidden = false;
+      const left = Math.max(10_000, body.expiresAt - Date.now() - 20_000);
+      status.textContent = 'This code renews itself every minute or so.';
+      timer = setTimeout(refresh, Math.min(left, 60_000));
+    } catch (error) {
+      qr.textContent = 'No code yet: ' + error.message;
+      open.hidden = true;
+      timer = setTimeout(refresh, 5_000);
+    }
+  }
+  refresh();
+</script>
+</body>
+</html>

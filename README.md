@@ -21,7 +21,7 @@ Setup: [docs/setup.md](docs/setup.md).
 | `packages/dsh-plugin/` | DSH plugin: iroh endpoint, pairing, device proofs, the DSH Web tunnel; `dsh-remote` CLI |
 | `apps/mobile/` | Flutter app: pairing, Rust iroh pipe (`native/`), DSH Web in a WebView |
 | `infra/` | OpenTofu for the iroh relays (Vultr + Cloudflare DNS) |
-| `deployment/` | systemd and launchd service templates and installer (plus Sprint 1 Cloudflare tooling, to be removed) |
+| `deployment/` | systemd and launchd service templates and installer; the App Review host (`review/`) (plus Sprint 1 Cloudflare tooling, to be removed) |
 | `spikes/` | Throwaway Phase 0 probes |
 
 ## Requirements
