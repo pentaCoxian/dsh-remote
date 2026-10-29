@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,6 +16,7 @@ import '../../state/host_session.dart';
 import '../../state/link.dart';
 import '../../state/providers.dart';
 import '../../transport/iroh_pipe.dart';
+import '../../ui/theme.dart';
 import '../../ui/widgets.dart';
 import '../../widgets/status.dart';
 
@@ -32,6 +34,17 @@ const _embeddedStyle = '''
   style.textContent = '.dsh-mobile-maxxing-install, .dsh-mobile-maxxing-foot, .dsh-mobile-maxxing-section:not(:has(.rdsh-update-launch)) { display: none !important; }';
   document.head.append(style);
 })();
+''';
+
+/// The colour of DSH Web's bottom edge, for the strip behind Android's navigation bar.
+const _bottomColor = r'''
+(() => {
+  for (let e = document.elementFromPoint(innerWidth / 2, innerHeight - 1); e; e = e.parentElement) {
+    const color = getComputedStyle(e).backgroundColor;
+    if (color && color !== 'transparent' && !/, 0\)$/.test(color)) return color;
+  }
+  return getComputedStyle(document.body).backgroundColor;
+})()
 ''';
 
 /// DSH Web itself, full screen, through the host's end-to-end encrypted tunnel.
@@ -58,6 +71,9 @@ class _WebScreenState extends ConsumerState<WebScreen> {
 
   /// The host's DSH Web lacks dsh-mobile-maxxing, and the user has not hidden the note.
   bool _noPhoneLayout = false;
+
+  /// DSH Web's bottom edge (light or dark theme), behind Android's navigation bar.
+  Color? _pageColor;
   bool _connecting = false;
 
   String get _hostId => widget.hostId;
@@ -88,6 +104,7 @@ class _WebScreenState extends ConsumerState<WebScreen> {
     if (!mounted || _connecting) return;
     if (status.webConnected == true) {
       _link(LinkState.online);
+      unawaited(_matchPageColor());
     } else {
       await _connect(quiet: true);
     }
@@ -204,6 +221,8 @@ class _WebScreenState extends ConsumerState<WebScreen> {
       onPageFinished: (_) {
         unawaited(controller.runJavaScript(_embeddedStyle).catchError((_) {}));
         if (mounted) setState(() => _loading = false);
+        // DSH Web paints its theme a moment after the load.
+        unawaited(Future<void>.delayed(const Duration(seconds: 1), _matchPageColor));
       },
       onWebResourceError: (error) {
         if (error.isForMainFrame != false && mounted) {
@@ -213,6 +232,17 @@ class _WebScreenState extends ConsumerState<WebScreen> {
       },
     )));
     return controller;
+  }
+
+  /// Gives the strip behind Android's navigation bar DSH Web's bottom colour.
+  Future<void> _matchPageColor() async {
+    final controller = _controller;
+    if (controller == null || defaultTargetPlatform != TargetPlatform.android) return;
+    final result = await controller.runJavaScriptReturningResult(_bottomColor).catchError((_) => '');
+    final rgb = RegExp(r'rgba?\((\d+),\s*(\d+),\s*(\d+)').firstMatch('$result');
+    if (rgb == null || !mounted) return;
+    final color = Color.fromARGB(255, int.parse(rgb[1]!), int.parse(rgb[2]!), int.parse(rgb[3]!));
+    if (color != _pageColor) setState(() => _pageColor = color);
   }
 
   /// Reload the page, reopening the window first: a host that lost it would refuse the reload.
@@ -235,12 +265,39 @@ class _WebScreenState extends ConsumerState<WebScreen> {
     final host = ref.watch(hostsProvider).valueOrNull?.where((h) => h.hostId == _hostId).firstOrNull;
     final link = ref.watch(linkStateProvider(_hostId));
     final controller = _controller;
-    return PopScope(
+    // Android: DSH Web stops above the navigation bar, as in a browser; behind the
+    // bar is a strip of the page's own bottom colour. (On iOS the WebView and DSH
+    // Web keep clear of the home indicator themselves.)
+    final android = defaultTargetPlatform == TargetPlatform.android;
+    final strip = android ? _pageColor : null;
+    final page = Column(children: [
+      SizedBox(height: 2, child: _loading && _error == null ? const LinearProgressIndicator(minHeight: 2) : null),
+      if (_noPhoneLayout && _error == null)
+        Notice(
+          text: 'DSH Web on this host has no phone layout. Install dsh-mobile-maxxing there; `dsh-remote doctor` shows how.',
+          action: 'Hide',
+          onAction: () => setState(() => _noPhoneLayout = false),
+        ),
+      if (_error != null)
+        Notice(
+          text: _error!,
+          danger: true,
+          action: link == LinkState.revoked ? 'Back' : 'Try again',
+          onAction: link == LinkState.revoked ? () => context.go('/') : _connect,
+        ),
+      Expanded(
+        child: controller == null
+            ? Center(child: _error == null ? Text('Opening DSH Web…', style: Theme.of(context).textTheme.bodySmall) : const SizedBox.shrink())
+            : WebViewWidget(controller: controller),
+      ),
+    ]);
+    final screen = PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) unawaited(_back());
       },
       child: Scaffold(
+        backgroundColor: strip,
         // A thin strip: DSH Web brings its own chrome.
         appBar: shellBar(
           context,
@@ -255,28 +312,15 @@ class _WebScreenState extends ConsumerState<WebScreen> {
             IconButton(tooltip: 'Connection and host settings', icon: const Icon(LucideIcons.settings2, size: 18), onPressed: () => context.push('/host/$_hostId/settings')),
           ],
         ),
-        body: Column(children: [
-          SizedBox(height: 2, child: _loading && _error == null ? const LinearProgressIndicator(minHeight: 2) : null),
-          if (_noPhoneLayout && _error == null)
-            Notice(
-              text: 'DSH Web on this host has no phone layout. Install dsh-mobile-maxxing there; `dsh-remote doctor` shows how.',
-              action: 'Hide',
-              onAction: () => setState(() => _noPhoneLayout = false),
-            ),
-          if (_error != null)
-            Notice(
-              text: _error!,
-              danger: true,
-              action: link == LinkState.revoked ? 'Back' : 'Try again',
-              onAction: link == LinkState.revoked ? () => context.go('/') : _connect,
-            ),
-          Expanded(
-            child: controller == null
-                ? Center(child: _error == null ? Text('Opening DSH Web…', style: Theme.of(context).textTheme.bodySmall) : const SizedBox.shrink())
-                : WebViewWidget(controller: controller),
-          ),
-        ]),
+        body: android ? SafeArea(top: false, child: page) : page,
       ),
+    );
+    if (strip == null) return screen;
+    // The bar's icons stay readable on a dark page as on a light one.
+    final icons = strip.computeLuminance() > 0.5 ? Brightness.dark : Brightness.light;
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: overlayStyle(Theme.of(context).brightness).copyWith(systemNavigationBarColor: strip, systemNavigationBarIconBrightness: icons),
+      child: screen,
     );
   }
 }
