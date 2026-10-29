@@ -19,7 +19,7 @@ WORKDIR /home/review
 ENV DSH_HOME=/home/review/.dsh
 
 # DSH Remote and dsh-mobile-maxxing from a release, checked the way the installer always checks them.
-ARG DSHR_VERSION=0.1.6
+ARG DSHR_VERSION=0.1.7
 RUN node -e "fetch('https://github.com/pentaCoxian/dsh-remote/releases/download/v' + process.env.DSHR_VERSION + '/install.mjs').then((r) => { if (!r.ok) throw new Error('install.mjs: ' + r.status); return r.text(); }).then((text) => require('node:fs').writeFileSync('/tmp/install.mjs', text))" \
   && node /tmp/install.mjs "$DSHR_VERSION" \
   && rm /tmp/install.mjs
