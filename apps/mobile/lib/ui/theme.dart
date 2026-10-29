@@ -252,9 +252,8 @@ ThemeData buildTheme(Brightness brightness) {
     ),
     progressIndicatorTheme: ProgressIndicatorThemeData(color: t.accent, linearTrackColor: Colors.transparent, circularTrackColor: Colors.transparent),
     textSelectionTheme: TextSelectionThemeData(cursorColor: t.accent, selectionColor: t.accent.withValues(alpha: 0.2), selectionHandleColor: t.accent),
-    pageTransitionsTheme: const PageTransitionsTheme(builders: {
-      TargetPlatform.android: PredictiveBackPageTransitionsBuilder(),
-      TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-    }),
+    // Page transitions are Flutter's defaults: the predictive-back one redrew the
+    // page, WebView included, on every frame of the gesture, which low-end
+    // Android phones could not keep up with.
   );
 }
