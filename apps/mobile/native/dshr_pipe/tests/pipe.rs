@@ -188,6 +188,58 @@ async fn serves_the_web_tunnel_on_a_loopback_port() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn reports_the_web_link_on_its_own() {
+    let host = echo_host().await;
+    let pipes = Pipes::start(SecretKey::generate().to_bytes(), &[]).await.unwrap();
+    pipes.open(&EndpointTicket::new(host.addr()).to_string(), &socket_path("weblink")).await.unwrap();
+    assert_eq!(pipes.status(host.id()).await["web"], serde_json::Value::Null, "no tunnel yet");
+    pipes.open_web(host.id(), 0).await.unwrap();
+    assert_eq!(pipes.status(host.id()).await["web"]["connected"], true);
+
+    // The host goes away: the app sees the web link down, and why.
+    host.close().await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let status = pipes.status(host.id()).await;
+    assert_eq!(status["web"]["connected"], false);
+    assert!(status["web"]["closed"].is_string(), "{status}");
+    pipes.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_burst_of_sockets_to_a_host_that_is_down_shares_one_dial() {
+    let host = echo_host().await;
+    let pipes = Pipes::start(SecretKey::generate().to_bytes(), &[]).await.unwrap();
+    let path = socket_path("burst");
+    pipes.open(&EndpointTicket::new(host.addr()).to_string(), &path).await.unwrap();
+    host.close().await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    // A WebView's reconnect burst: each socket would otherwise wait for its own dial.
+    let started = std::time::Instant::now();
+    let sockets: Vec<_> = (0..4)
+        .map(|_| {
+            let path = path.clone();
+            tokio::spawn(async move {
+                let mut socket = UnixStream::connect(&path).await.unwrap();
+                let mut reply = Vec::new();
+                let _ = socket.read_to_end(&mut reply).await;
+                reply.len()
+            })
+        })
+        .collect();
+    // The app's status checks do not wait on the dial.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let asked = std::time::Instant::now();
+    let status = pipes.status(host.id()).await;
+    assert!(asked.elapsed() < Duration::from_secs(1), "status waited {:?}", asked.elapsed());
+    assert_eq!(status["dialing"], true);
+    assert_eq!(futures_join(sockets).await, vec![0; 4], "each socket is dropped");
+    let elapsed = started.elapsed();
+    assert!(elapsed < Duration::from_secs(20), "the sockets dialed one after another: {elapsed:?}");
+    pipes.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn fails_fast_for_an_unreachable_host() {
     // A ticket naming a key nobody serves, with no addresses at all.
     let ticket = EndpointTicket::new(iroh::EndpointAddr::new(SecretKey::generate().public())).to_string();

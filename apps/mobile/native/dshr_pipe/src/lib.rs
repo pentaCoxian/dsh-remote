@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use iroh::endpoint::{presets, Connection};
 use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMap, RelayMode, RelayUrl, SecretKey};
@@ -32,6 +32,11 @@ pub const WEB_ALPN: &[u8] = b"dsh-remote/web/1";
 /// ALPN of the push gateway, which the app reaches like a host: HTTP/1.1 per bi-stream.
 pub const PUSH_ALPN: &[u8] = b"dsh-remote/push/1";
 const DIAL_TIMEOUT: Duration = Duration::from_secs(15);
+/// A dial that failed this recently fails the sockets queued behind it too, so a
+/// WebView's burst of connections to a host that is down does not dial it once each.
+const DIAL_FAILURE_HOLD: Duration = Duration::from_secs(2);
+/// How long a socket waits for a stream: a connection with none to spare is as good as down.
+const STREAM_TIMEOUT: Duration = Duration::from_secs(10);
 /// How long the host may keep answering after the app closed its side of a socket.
 const DRAIN_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -55,6 +60,8 @@ pub fn ticket_info(ticket: &str) -> Result<Value> {
 /// The endpoint and its pipes. Dropping it does not close anything: call `shutdown`.
 pub struct Pipes {
     endpoint: Endpoint,
+    /// This phone's relays, also tried for every host (see [`Link::connection`]).
+    relays: Vec<RelayUrl>,
     pipes: Mutex<HashMap<EndpointId, Pipe>>,
 }
 
@@ -77,31 +84,69 @@ struct Link {
     endpoint: Endpoint,
     alpn: &'static [u8],
     addr: std::sync::Mutex<EndpointAddr>,
-    connection: Mutex<Option<Connection>>,
+    relays: Vec<RelayUrl>,
+    /// Held while dialing, so concurrent sockets share one dial.
+    connection: Mutex<Dialed>,
+}
+
+#[derive(Default)]
+struct Dialed {
+    connection: Option<Connection>,
+    failure: Option<(Instant, String)>,
 }
 
 impl Link {
+    fn new(endpoint: Endpoint, alpn: &'static [u8], addr: EndpointAddr, relays: Vec<RelayUrl>) -> Self {
+        Self { endpoint, alpn, addr: std::sync::Mutex::new(addr), relays, connection: Mutex::new(Dialed::default()) }
+    }
+
     /// The live connection, redialed once the last one has closed.
     async fn connection(&self) -> Result<Connection> {
         let mut current = self.connection.lock().await;
-        if let Some(connection) = current.as_ref()
+        if let Some(connection) = current.connection.as_ref()
             && connection.close_reason().is_none()
         {
             return Ok(connection.clone());
         }
-        let addr = self.addr.lock().expect("addr lock").clone();
-        let connection = tokio::time::timeout(DIAL_TIMEOUT, self.endpoint.connect(addr, self.alpn))
-            .await
-            .map_err(|_| "the host did not answer".to_string())?
-            .map_err(|e| format!("cannot reach the host: {e}"))?;
-        *current = Some(connection.clone());
-        Ok(connection)
+        if let Some((at, error)) = &current.failure
+            && at.elapsed() < DIAL_FAILURE_HOLD
+        {
+            return Err(error.clone());
+        }
+        // The ticket names the host's home relay when it was written. A restarted host
+        // may have homed on another of the same relays (or its old one may be down),
+        // and only a connection could fetch its new ticket: look on all of them.
+        let addr = self.relays.iter().cloned().fold(self.addr.lock().expect("addr lock").clone(), EndpointAddr::with_relay_url);
+        let dialed = match tokio::time::timeout(DIAL_TIMEOUT, self.endpoint.connect(addr, self.alpn)).await {
+            Err(_) => Err("the host did not answer".to_string()),
+            Ok(Err(e)) => Err(format!("cannot reach the host: {e}")),
+            Ok(Ok(connection)) => Ok(connection),
+        };
+        match dialed {
+            Ok(connection) => {
+                *current = Dialed { connection: Some(connection.clone()), failure: None };
+                Ok(connection)
+            }
+            Err(error) => {
+                current.failure = Some((Instant::now(), error.clone()));
+                Err(error)
+            }
+        }
     }
 
-    async fn status(&self) -> Value {
-        let current = self.connection.lock().await;
-        let Some(connection) = current.as_ref().filter(|c| c.close_reason().is_none()) else {
-            return json!({ "connected": false, "paths": [] });
+    /// Take the connection, to close it.
+    async fn take(&self) -> Option<Connection> {
+        self.connection.lock().await.connection.take()
+    }
+
+    /// Never waits on a dial in progress: it reports `dialing` instead.
+    fn status(&self) -> Value {
+        let Ok(current) = self.connection.try_lock() else {
+            return json!({ "connected": false, "dialing": true, "paths": [] });
+        };
+        let Some(connection) = current.connection.as_ref().filter(|c| c.close_reason().is_none()) else {
+            let closed = current.connection.as_ref().and_then(|c| c.close_reason()).map(|reason| reason.to_string());
+            return json!({ "connected": false, "paths": [], "closed": closed.or_else(|| current.failure.as_ref().map(|(_, error)| error.clone())) });
         };
         let paths: Vec<Value> = connection
             .paths()
@@ -115,19 +160,19 @@ impl Link {
 impl Pipes {
     /// Bind the phone's endpoint. `relays` empty disables relays (LAN and direct only).
     pub async fn start(secret_key: [u8; 32], relays: &[String]) -> Result<Self> {
-        let relay_mode = if relays.is_empty() {
-            RelayMode::Disabled
-        } else {
-            let urls = relays.iter().map(|url| url.parse::<RelayUrl>().map_err(|e| format!("bad relay url {url}: {e}"))).collect::<Result<Vec<_>>>()?;
-            RelayMode::Custom(RelayMap::from_iter(urls))
-        };
+        let relays = relays.iter().map(|url| url.parse::<RelayUrl>().map_err(|e| format!("bad relay url {url}: {e}"))).collect::<Result<Vec<_>>>()?;
+        let relay_mode = if relays.is_empty() { RelayMode::Disabled } else { RelayMode::Custom(RelayMap::from_iter(relays.clone())) };
         let endpoint = Endpoint::builder(presets::Minimal)
             .secret_key(SecretKey::from_bytes(&secret_key))
             .relay_mode(relay_mode)
             .bind()
             .await
             .map_err(|e| format!("cannot start the iroh endpoint: {e}"))?;
-        Ok(Self { endpoint, pipes: Mutex::new(HashMap::new()) })
+        Ok(Self { endpoint, relays, pipes: Mutex::new(HashMap::new()) })
+    }
+
+    fn link(&self, alpn: &'static [u8], addr: EndpointAddr) -> Arc<Link> {
+        Arc::new(Link::new(self.endpoint.clone(), alpn, addr, self.relays.clone()))
     }
 
     pub fn endpoint_id(&self) -> EndpointId {
@@ -145,17 +190,28 @@ impl Pipes {
     pub async fn open_alpn(&self, ticket: &str, socket_path: &Path, alpn: &'static [u8]) -> Result<Value> {
         let addr = parse_ticket(ticket)?;
         let host = addr.id;
-        let mut pipes = self.pipes.lock().await;
-        if let Some(pipe) = pipes.get(&host) {
+        // Dials happen outside the lock: a host that is down must not stall status calls.
+        let existing = self.pipes.lock().await.get(&host).map(|pipe| {
             *pipe.link.addr.lock().expect("addr lock") = addr.clone();
             if let Some(web) = &pipe.web {
-                *web.link.addr.lock().expect("addr lock") = addr;
+                *web.link.addr.lock().expect("addr lock") = addr.clone();
             }
-            pipe.link.connection().await?;
+            (pipe.link.clone(), pipe.socket_path.clone())
+        });
+        if let Some((link, socket_path)) = existing {
+            link.connection().await?;
+            return Ok(json!({ "hostId": host.to_string(), "socketPath": socket_path }));
+        }
+        let link = self.link(alpn, addr);
+        link.connection().await?;
+        let mut pipes = self.pipes.lock().await;
+        if let Some(pipe) = pipes.get(&host) {
+            // Opened meanwhile by another call: keep that one.
+            if let Some(connection) = link.take().await {
+                connection.close(0u32.into(), b"duplicate");
+            }
             return Ok(json!({ "hostId": host.to_string(), "socketPath": pipe.socket_path }));
         }
-        let link = Arc::new(Link { endpoint: self.endpoint.clone(), alpn, addr: std::sync::Mutex::new(addr), connection: Mutex::new(None) });
-        link.connection().await?;
         let _ = tokio::fs::remove_file(socket_path).await;
         let listener = UnixListener::bind(socket_path).map_err(|e| format!("cannot listen on {}: {e}", socket_path.display()))?;
         std::fs::set_permissions(socket_path, std::fs::Permissions::from_mode(0o600)).map_err(|e| format!("cannot restrict the socket: {e}"))?;
@@ -171,15 +227,30 @@ impl Pipes {
     /// on the phone can reach the port but not DSH Web: DSH still wants its
     /// owner cookie, which only this app's WebView holds.
     pub async fn open_web(&self, host: EndpointId, preferred_port: u16) -> Result<Value> {
+        let (existing, addr) = {
+            let pipes = self.pipes.lock().await;
+            let pipe = pipes.get(&host).ok_or_else(|| "open the host first".to_string())?;
+            (pipe.web.as_ref().map(|web| (web.link.clone(), web.port)), pipe.link.addr.lock().expect("addr lock").clone())
+        };
+        if let Some((link, port)) = existing {
+            link.connection().await?;
+            return Ok(json!({ "port": port }));
+        }
+        let link = self.link(WEB_ALPN, addr);
+        link.connection().await?;
         let mut pipes = self.pipes.lock().await;
-        let pipe = pipes.get_mut(&host).ok_or_else(|| "open the host first".to_string())?;
+        let Some(pipe) = pipes.get_mut(&host) else {
+            if let Some(connection) = link.take().await {
+                connection.close(0u32.into(), b"closed by app");
+            }
+            return Err("the host was closed".into());
+        };
         if let Some(web) = &pipe.web {
-            web.link.connection().await?;
+            if let Some(connection) = link.take().await {
+                connection.close(0u32.into(), b"duplicate");
+            }
             return Ok(json!({ "port": web.port }));
         }
-        let addr = pipe.link.addr.lock().expect("addr lock").clone();
-        let link = Arc::new(Link { endpoint: self.endpoint.clone(), alpn: WEB_ALPN, addr: std::sync::Mutex::new(addr), connection: Mutex::new(None) });
-        link.connection().await?;
         let listener = match TcpListener::bind(("127.0.0.1", preferred_port)).await {
             Ok(listener) => listener,
             Err(_) => TcpListener::bind(("127.0.0.1", 0)).await.map_err(|e| format!("cannot listen for the web view: {e}"))?,
@@ -210,16 +281,17 @@ impl Pipes {
         let mut status = match pipes.get(&host) {
             Some(pipe) => {
                 // DSH Web runs over the web link, which may be the only live one.
-                let mut status = pipe.link.status().await;
+                let mut status = pipe.link.status();
+                let web = pipe.web.as_ref().map(|web| web.link.status());
                 if status["connected"] != true
-                    && let Some(web) = &pipe.web
+                    && let Some(web) = &web
+                    && web["connected"] == true
                 {
-                    let web_status = web.link.status().await;
-                    if web_status["connected"] == true {
-                        status = web_status;
-                    }
+                    status = web.clone();
                 }
                 status["webPort"] = json!(pipe.web.as_ref().map(|web| web.port));
+                // The web link on its own: DSH Web needs that one, whatever the API link does.
+                status["web"] = web.unwrap_or(Value::Null);
                 status
             }
             None => json!({ "connected": false, "paths": [], "open": false }),
@@ -248,7 +320,7 @@ async fn stop_pipe(mut pipe: Pipe) {
         stop_web(web).await;
     }
     pipe.accept.abort();
-    if let Some(connection) = pipe.link.connection.lock().await.take() {
+    if let Some(connection) = pipe.link.take().await {
         connection.close(0u32.into(), b"closed by app");
     }
     let _ = tokio::fs::remove_file(&pipe.socket_path).await;
@@ -256,7 +328,7 @@ async fn stop_pipe(mut pipe: Pipe) {
 
 async fn stop_web(web: WebPipe) {
     web.accept.abort();
-    if let Some(connection) = web.link.connection.lock().await.take() {
+    if let Some(connection) = web.link.take().await {
         connection.close(0u32.into(), b"closed by app");
     }
 }
@@ -290,7 +362,10 @@ where
     W: AsyncWrite + Unpin + Send + 'static,
 {
     let connection = link.connection().await?;
-    let (mut send, mut recv) = connection.open_bi().await.map_err(|e| format!("cannot open a stream: {e}"))?;
+    let (mut send, mut recv) = tokio::time::timeout(STREAM_TIMEOUT, connection.open_bi())
+        .await
+        .map_err(|_| "no stream to spare".to_string())?
+        .map_err(|e| format!("cannot open a stream: {e}"))?;
     let mut down = tokio::spawn(async move {
         let _ = tokio::io::copy(&mut recv, &mut to_app).await;
         let _ = to_app.shutdown().await;
