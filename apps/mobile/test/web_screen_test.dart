@@ -143,6 +143,9 @@ void main() {
 
   PairedHost stored(ProviderContainer container) => container.read(hostsProvider).requireValue.single;
 
+  /// The screen is done with its attempt (its request answered), so closing it leaves nothing in flight.
+  bool settled(ProviderContainer container) => container.read(linkStateProvider(_hostId)) != LinkState.connecting;
+
   testWidgets('opened before the hosts have loaded (a notification on a cold start), it asks the host', (tester) async {
     final store = _SlowStore();
     await HostStore(store).save([_paired()]);
@@ -150,7 +153,7 @@ void main() {
     expect(container.read(hostsProvider).isLoading, isTrue);
 
     store.ready.complete();
-    await until(tester, () => host.routes.isNotEmpty);
+    await until(tester, () => settled(container));
     expect(host.routes, ['POST /v1/web/session']);
     expect(stored(container).revoked, isFalse);
     expect(container.read(linkStateProvider(_hostId)), isNot(LinkState.revoked));
@@ -162,7 +165,7 @@ void main() {
     await HostStore(store).save([_paired(revoked: true)]);
     final container = await open(tester, store);
 
-    await until(tester, () => container.read(hostsProvider).valueOrNull?.single.revoked == false);
+    await until(tester, () => settled(container) && container.read(hostsProvider).valueOrNull?.single.revoked == false);
     expect(host.routes, ['POST /v1/web/session']);
     await close(tester, container);
   });
@@ -173,7 +176,7 @@ void main() {
     host.answer = () => (403, {'error': {'code': 'DEVICE_REVOKED', 'message': 'revoked'}});
     final container = await open(tester, store);
 
-    await until(tester, () => container.read(hostsProvider).valueOrNull?.single.revoked == true);
+    await until(tester, () => settled(container) && container.read(hostsProvider).valueOrNull?.single.revoked == true);
     expect(container.read(linkStateProvider(_hostId)), LinkState.revoked);
     expect(find.text('Access removed by the host.'), findsOneWidget);
     await close(tester, container);
