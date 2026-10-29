@@ -20,13 +20,15 @@ import '../../widgets/status.dart';
 /// dsh-mobile-maxxing's browser-only pieces (the "Add to Home Screen" card, the
 /// install button in the drawer and the PWA settings section) do not apply here:
 /// DSH Web runs inside this app, not in a browser tab, and a home-screen copy
-/// would point at this app's private tunnel port. Class names as of 0.6.0.
+/// would point at this app's private tunnel port. Its Update tab (1.0.0) shares
+/// the section's class and stays: it updates the plugin on the host. Class names
+/// as of 0.6.0 to 1.0.0.
 const _embeddedStyle = '''
 (() => {
   if (document.getElementById('dsh-remote-embedded')) return;
   const style = document.createElement('style');
   style.id = 'dsh-remote-embedded';
-  style.textContent = '.dsh-mobile-maxxing-install, .dsh-mobile-maxxing-foot, .dsh-mobile-maxxing-section { display: none !important; }';
+  style.textContent = '.dsh-mobile-maxxing-install, .dsh-mobile-maxxing-foot, .dsh-mobile-maxxing-section:not(:has(.rdsh-update-launch)) { display: none !important; }';
   document.head.append(style);
 })();
 ''';
