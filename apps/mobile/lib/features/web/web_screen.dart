@@ -11,6 +11,7 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 import '../../core/errors.dart';
 import '../../push/push_registration.dart';
+import '../../state/host_session.dart';
 import '../../state/link.dart';
 import '../../state/providers.dart';
 import '../../transport/iroh_pipe.dart';
@@ -114,7 +115,7 @@ class _WebScreenState extends ConsumerState<WebScreen> {
     try {
       final session = ref.read(hostSessionProvider(_hostId));
       if (session == null) throw const ApiException(status: 403, code: 'DEVICE_REVOKED', message: 'not paired');
-      final web = await session.api.webSession();
+      final web = await _openWindow(session);
       if (mounted) setState(() => _noPhoneLayout = web.phoneLayout == false);
       final host = ref.read(hostsProvider).valueOrNull?.where((h) => h.hostId == _hostId).firstOrNull;
       final port = await ref.read(pipeManagerProvider).openWeb(_hostId, () => host?.ticket ?? session.host.ticket);
@@ -154,6 +155,19 @@ class _WebScreenState extends ConsumerState<WebScreen> {
       if (mounted && !quiet) setState(() => _error = 'Could not open DSH Web: $error');
     } finally {
       _connecting = false;
+    }
+  }
+
+  /// Opens the window (`POST /v1/web/session`). A connection that looks open but
+  /// carries nothing (a path the network change broke) would hold this for the
+  /// client's 20 s timeout, and every retry on it after that: past 8 s the app
+  /// hangs up and asks again on a new connection.
+  Future<({String tokenQuery, DateTime expiresAt, bool? phoneLayout})> _openWindow(HostSession session) async {
+    try {
+      return await session.api.webSession().timeout(const Duration(seconds: 8));
+    } on TimeoutException {
+      await ref.read(pipeManagerProvider).reconnect(_hostId);
+      return session.api.webSession();
     }
   }
 

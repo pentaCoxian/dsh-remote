@@ -29,14 +29,16 @@ class PipeManager {
   Future<String>? _started;
   final Map<String, Future<String>> _open = {};
 
-  /// The endpoint a pause is still closing: the next start waits for it.
-  Future<void>? _stopping;
+  /// The pipes a pause is still closing: pipes opened after it wait for it.
+  Future<void>? _suspending;
+
+  /// Set by a pause, cleared by the first pipe after it.
+  bool _paused = false;
 
   /// This phone's EndpointId, starting the endpoint on first use.
   Future<String> start() => _shared(() => _started, (f) => _started = f, _start);
 
   Future<String> _start() async {
-    await _stopping;
     var encoded = await store.read(_keyName);
     if (encoded == null) {
       final random = Random.secure();
@@ -61,14 +63,25 @@ class PipeManager {
   /// The socket for [hostId], dialing [ticket] first when the pipe is not open.
   Future<String> socketFor(String hostId, String Function() ticket) => _shared(() => _open[hostId], (f) => f == null ? _open.remove(hostId) : _open[hostId] = f, () async {
         await start();
+        await _resume();
         return (await pipe.open(ticket(), _path(hostId))).socketPath;
       });
+
+  /// Before the first pipe after a pause: wait for its suspend, then have iroh
+  /// look at the network again, which may have changed while the app was away.
+  Future<void> _resume() async {
+    await _suspending;
+    if (!_paused) return;
+    _paused = false;
+    await pipe.networkChanged().catchError((_) {});
+  }
 
   HostLink link(String hostId, String Function() ticket) => HostLink(() => socketFor(hostId, ticket));
 
   /// A link to the push gateway [ticket] names (its id is [gatewayId]); close it with [close].
   HostLink gatewayLink(String gatewayId, String ticket) => HostLink(() => _shared(() => _open[gatewayId], (f) => f == null ? _open.remove(gatewayId) : _open[gatewayId] = f, () async {
         await start();
+        await _resume();
         return (await pipe.openGateway(ticket, _path(gatewayId, prefix: 'g'))).socketPath;
       }));
 
@@ -113,18 +126,28 @@ class PipeManager {
     if (_open.remove(hostId) != null) await pipe.close(hostId).catchError((_) {});
   }
 
-  /// The app is going to the background: close the endpoint (sockets die there
-  /// anyway). The next request starts it again and reopens its pipe, once this
-  /// stop is done; a start still in flight finishes first, so it is stopped too.
+  /// Hang up on [hostId] and keep its pipe, for a connection that looks open but
+  /// carries nothing: the next request dials a new one.
+  Future<void> reconnect(String hostId) async {
+    if (_open.containsKey(hostId)) await pipe.reconnect(hostId).catchError((_) {});
+  }
+
+  /// The app is going to the background: close every pipe (sockets die there
+  /// anyway) and keep the endpoint. The next request reopens its pipe once this
+  /// is done; a start still in flight finishes first.
+  ///
+  /// Not a new endpoint on return: one started while the old one is still
+  /// closing (a slow network, a socket the WebView holds) shares its key, the
+  /// relay serves the two by turns, and new connections stall for up to a minute.
   Future<void> pause() async {
-    final started = _started;
-    _started = null;
     _open.clear();
+    final started = _started;
     if (started == null) return;
-    final stopping = started.then((_) {}, onError: (_) {}).then((_) => pipe.stop()).catchError((_) {});
-    _stopping = stopping;
-    await stopping;
-    if (identical(_stopping, stopping)) _stopping = null;
+    _paused = true;
+    final suspending = started.then((_) {}, onError: (_) {}).then((_) => pipe.suspend()).catchError((_) {});
+    _suspending = suspending;
+    await suspending;
+    if (identical(_suspending, suspending)) _suspending = null;
   }
 
   Future<void> networkChanged() async {

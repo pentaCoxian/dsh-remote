@@ -90,10 +90,16 @@ abstract interface class IrohPipe {
   Future<void> closeWeb(String hostId);
   Future<PipeStatus> status(String hostId);
 
+  /// Hang up on [hostId] and keep its pipe: the next request dials a new connection.
+  Future<void> reconnect(String hostId);
+
   /// The EndpointId a ticket names, without dialing.
   Future<String> ticketHostId(String ticket);
 
   Future<void> networkChanged();
+
+  /// Close every pipe and keep the endpoint (the app in the background).
+  Future<void> suspend();
 
   /// Close every pipe and the endpoint.
   Future<void> stop();
@@ -134,9 +140,9 @@ Map<String, dynamic> _invoke(String name, List<Object> args) {
         reply = lib.lookupFunction<_TwoC, _TwoC>('dshr_$name')(text(args[0]), text(args[1]));
       case 'open_web':
         reply = lib.lookupFunction<_WebC, _WebD>('dshr_open_web')(text(args[0]), args[1] as int);
-      case 'close' || 'close_web' || 'status' || 'ticket_info':
+      case 'close' || 'close_web' || 'status' || 'ticket_info' || 'reconnect':
         reply = lib.lookupFunction<_OneC, _OneC>('dshr_$name')(text(args[0]));
-      case 'network_changed' || 'stop':
+      case 'network_changed' || 'suspend' || 'stop':
         reply = lib.lookupFunction<_NoneC, _NoneC>('dshr_$name')();
       default:
         throw ArgumentError(name);
@@ -186,10 +192,16 @@ class NativeIrohPipe implements IrohPipe {
   Future<PipeStatus> status(String hostId) async => PipeStatus.fromJson(await _call('status', [hostId]));
 
   @override
+  Future<void> reconnect(String hostId) => _call('reconnect', [hostId]);
+
+  @override
   Future<String> ticketHostId(String ticket) async => (await _call('ticket_info', [ticket]))['endpointId'] as String;
 
   @override
   Future<void> networkChanged() => _call('network_changed');
+
+  @override
+  Future<void> suspend() => _call('suspend');
 
   @override
   Future<void> stop() => _call('stop');
