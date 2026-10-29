@@ -63,3 +63,27 @@ variable "admin_cidrs" {
   type        = list(string)
   default     = []
 }
+
+variable "review" {
+  description = "Whether the App Review host exists (review.tf). On only while a store review is open."
+  type        = bool
+  default     = false
+}
+
+variable "review_region" {
+  description = "Vultr region of the App Review host."
+  type        = string
+  default     = "nrt"
+}
+
+variable "review_plan" {
+  description = "Vultr plan of the App Review host: 2 GB, for building and running DSH in Docker."
+  type        = string
+  default     = "vhp-1c-2gb-amd"
+}
+
+variable "review_hostname" {
+  description = "DNS name of the App Review host; Caddy gets its certificate for this name."
+  type        = string
+  default     = "review.dshremote.pentacoxian.dev"
+}

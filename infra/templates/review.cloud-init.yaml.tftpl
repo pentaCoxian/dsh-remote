@@ -1,0 +1,24 @@
+#cloud-config
+# DSH Remote App Review host ${hostname}: Docker with Compose, unattended
+# security updates and some swap for building the image. infra/review/deploy.sh
+# brings the container up. Runs once at first boot.
+package_update: true
+package_upgrade: true
+packages:
+  - docker.io
+  - docker-compose
+  - docker-buildx
+  - unattended-upgrades
+
+write_files:
+  - path: /etc/apt/apt.conf.d/20auto-upgrades
+    permissions: "0644"
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+
+runcmd:
+  - [sh, -c, 'if command -v ufw >/dev/null 2>&1; then ufw allow 80/tcp && ufw allow 443/tcp; fi']
+  - [sh, -c, 'fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile && echo "/swapfile none swap sw 0 0" >> /etc/fstab']
+  - [systemctl, enable, --now, docker.service]
+  - [install, -d, -m, "0700", /opt/review]

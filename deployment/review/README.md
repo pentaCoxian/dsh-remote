@@ -16,8 +16,24 @@ page's path secret, and delete the machine after the review.
 
 ## Run it
 
-On the VM (Docker with Compose), with a DNS name pointing at it and ports 80 and
-443 open:
+On the project's Vultr account, `infra/review.tf` makes the VM (Tokyo, 2 GB,
+$12/mo, Docker; 80 and 443 open, SSH from `admin_cidrs` only) and its DNS name,
+`review.dshremote.pentacoxian.dev`:
+
+```sh
+# review = true in infra/terraform.tfvars, then:
+infra/tofu.sh plan -out=review.tfplan -target=vultr_firewall_rule.review_public \
+  -target=vultr_firewall_rule.review_ssh -target=cloudflare_dns_record.review_a \
+  -target=cloudflare_dns_record.review_aaaa
+infra/tofu.sh apply review.tfplan
+infra/review/deploy.sh    # prints the page's URL; the secret path is in .secrets/review-token
+```
+
+When the reviews are over, set `review = false`, plan and apply the same way
+(it deletes the VM and its records), and delete `infra/review/known_hosts`.
+
+Anywhere else (Docker with Compose), with a DNS name pointing at the machine and
+ports 80 and 443 open:
 
 ```sh
 cd deployment/review
@@ -53,6 +69,7 @@ For App Store Connect → App Review Information → Notes (no sign-in needed):
 > internet.
 >
 > We run a review host with a scripted model:
+>
 > 1. On a computer, open https://REVIEW_DOMAIN/REVIEW_TOKEN/ . It shows a
 >    pairing code and renews it every minute.
 > 2. On the iPhone, open DSH Remote, tap Connect host and scan the code (allow
@@ -68,3 +85,20 @@ For App Store Connect → App Review Information → Notes (no sign-in needed):
 > notifications, decrypted on the device by a Notification Service Extension.
 >
 > Encryption: standard algorithms only (TLS 1.3 within QUIC, AES-GCM).
+
+For Google Play Console → App content → App access, choose "All or some
+functionality in my app is restricted" and add one set of instructions (name
+"Review host", no username or password):
+
+> DSH Remote has no accounts. It pairs with the user's own DeepSeek Harness (DSH)
+> host by scanning a code the host shows, then shows that host's DSH Web over an
+> end-to-end encrypted connection. We run a review host with a scripted model:
+>
+> 1. On a computer, open https://REVIEW_DOMAIN/REVIEW_TOKEN/ . It shows a
+>    pairing code and renews it every minute.
+> 2. On the Android device, open DSH Remote, tap Connect host and scan the code
+>    (allow the camera). The device is approved automatically.
+> 3. Tap "DSH Remote review host" to open DSH Web, and allow notifications.
+> 4. Send any message for a reply. Send "please use a tool" to approve a tool
+>    call. Send "notify me" and leave the app: an "Approval needed" notification
+>    arrives about 45 seconds later.

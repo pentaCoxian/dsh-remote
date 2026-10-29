@@ -5,3 +5,6 @@
 terraform.tfvars
 crash.log
 *.tfplan
+
+# The review VM is replaced per review: its SSH key is recorded on first contact.
+review/known_hosts

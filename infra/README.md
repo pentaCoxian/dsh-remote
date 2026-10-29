@@ -68,3 +68,10 @@ infra/push/deploy.sh      # confirm with the owner first: it changes the live bo
 ```sh
 ssh -o UserKnownHostsFile=infra/push/known_hosts root@nrt1.relay.dshremote.pentacoxian.dev journalctl -u dshr-push -n 50
 ```
+
+## App Review host
+
+`review.tf` makes a throwaway VM for the store reviewers' host (`review = true` in
+`terraform.tfvars`; off by default) and `infra/review/deploy.sh` brings the host
+up on it. How to run it, take it down and what to tell the reviewers:
+[deployment/review/README.md](../deployment/review/README.md).
