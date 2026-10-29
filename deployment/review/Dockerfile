@@ -11,7 +11,7 @@ RUN npm install -g @deepseek-ai/dsh@0.2.1-rc.3 pnpm@11.28.8 && npm cache clean -
 
 WORKDIR /opt/review
 RUN npm install --no-audit --no-fund qrcode@1.5.4 && npm cache clean --force
-COPY model.mjs start.mjs page.html ./
+COPY model.mjs start.mjs page.html live-speed-fix.json ./
 
 RUN useradd --create-home --uid 10001 review
 USER review

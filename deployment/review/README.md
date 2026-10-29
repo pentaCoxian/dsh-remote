@@ -3,7 +3,9 @@
 App Review needs a host to pair with, or DSH Remote shows nothing. This folder
 builds one as a container:
 
-- DSH 0.2.1-rc.3 with DSH Remote and dsh-mobile-maxxing from a release;
+- DSH 0.2.1-rc.3 with DSH Remote and dsh-mobile-maxxing from a release, plus
+  the fix for dsh-mobile-maxxing 1.0.0's speed label (`live-speed-fix.json`),
+  which `start.mjs` applies until a release carries it;
 - a scripted model (`model.mjs`), so no API key or cost is involved;
 - `start.mjs`, which serves a pairing page under a secret path and approves the
   phones that scan its codes (only those: codes from anywhere else still need

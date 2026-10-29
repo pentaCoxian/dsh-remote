@@ -64,7 +64,27 @@ writeFileSync(
     model: scripted
 `,
 );
+log(`dsh-mobile-maxxing speed label: ${fixLiveSpeed()}`);
 run('dsh web', 'dsh', ['web', '--patch', patch, '--host', '127.0.0.1', '--port', '3080', '--no-open'], { ...process.env, DSH_TELEMETRY_DISABLED: '1', REVIEW_MODEL_KEY: 'review' });
+
+/**
+ * dsh-mobile-maxxing 1.0.0's speed label starts a request every 500 ms without
+ * waiting for the last. On a slow link they take every connection the browser
+ * allows to the host and DSH Web stalls. Until a release carries the fix
+ * (live-speed-fix.json, from the upstream branch it names), it is applied to
+ * the installed copy at every start: that copy lives in the home volume, which
+ * keeps what was installed when it was created, so the image cannot carry it.
+ */
+function fixLiveSpeed() {
+  const client = join(home, 'profiles/web/node_modules/dsh-mobile-maxxing/packages/dsh-mobile-maxxing/client.js');
+  if (!existsSync(client)) return 'not installed';
+  const { before, after } = JSON.parse(readFileSync(join(here, 'live-speed-fix.json'), 'utf8'));
+  const source = readFileSync(client, 'utf8');
+  if (source.includes(after)) return 'fixed';
+  if (!source.includes(before)) return 'left alone: not the 1.0.0 code';
+  writeFileSync(client, source.replace(before, () => after));
+  return 'fixed now';
+}
 
 /** One request on DSH Remote's admin socket (newline-delimited JSON). */
 function admin(request) {
