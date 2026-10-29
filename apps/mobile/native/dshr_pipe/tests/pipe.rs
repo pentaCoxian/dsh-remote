@@ -240,6 +240,46 @@ async fn a_burst_of_sockets_to_a_host_that_is_down_shares_one_dial() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn suspends_without_a_new_endpoint_and_reopens() {
+    use tokio::net::TcpStream;
+    let host = echo_host().await;
+    let pipes = Pipes::start(SecretKey::generate().to_bytes(), &[]).await.unwrap();
+    let id = pipes.endpoint_id();
+    let path = socket_path("suspend");
+    let ticket = EndpointTicket::new(host.addr()).to_string();
+    pipes.open(&ticket, &path).await.unwrap();
+    let port = pipes.open_web(host.id(), 0).await.unwrap()["port"].as_u64().unwrap() as u16;
+
+    // The app in the background: sockets and connections go, the endpoint stays.
+    pipes.suspend().await;
+    assert!(!path.exists());
+    assert!(TcpStream::connect(("127.0.0.1", port)).await.is_err());
+    assert_eq!(pipes.status(host.id()).await["open"], false);
+
+    // Back: the same endpoint opens the pipes again.
+    pipes.open(&ticket, &path).await.unwrap();
+    assert_eq!(pipes.endpoint_id(), id);
+    assert_eq!(round_trip(&path, "back").await, "BACK");
+    pipes.shutdown().await;
+    host.close().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn reconnects_a_host_on_a_new_connection() {
+    let host = echo_host().await;
+    let pipes = Pipes::start(SecretKey::generate().to_bytes(), &[]).await.unwrap();
+    let path = socket_path("reconnect");
+    pipes.open(&EndpointTicket::new(host.addr()).to_string(), &path).await.unwrap();
+    assert_eq!(round_trip(&path, "one").await, "ONE");
+    assert!(pipes.reconnect(host.id()).await);
+    assert_eq!(pipes.status(host.id()).await["connected"], false, "hung up");
+    assert_eq!(round_trip(&path, "two").await, "TWO");
+    assert!(!pipes.reconnect(SecretKey::generate().public()).await, "no such pipe");
+    pipes.shutdown().await;
+    host.close().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn fails_fast_for_an_unreachable_host() {
     // A ticket naming a key nobody serves, with no addresses at all.
     let ticket = EndpointTicket::new(iroh::EndpointAddr::new(SecretKey::generate().public())).to_string();

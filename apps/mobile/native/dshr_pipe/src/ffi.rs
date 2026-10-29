@@ -169,6 +169,32 @@ pub unsafe extern "C" fn dshr_status(host: *const c_char) -> *mut c_char {
     })
 }
 
+/// Hang up on one host and keep its pipe, so the next socket dials a new
+/// connection (one that looked open but carried nothing).
+///
+/// # Safety
+/// `host` must be a valid C string.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dshr_reconnect(host: *const c_char) -> *mut c_char {
+    respond(|| {
+        let host = host_id(&unsafe { string(host, "host id") }?)?;
+        let pipes = current()?;
+        Ok(json!({ "reconnected": runtime().block_on(pipes.reconnect(host)) }))
+    })
+}
+
+/// Close every pipe and keep the endpoint (the app going to the background).
+/// Coming back reopens pipes on the same endpoint: a fresh one would share the
+/// key with this one while it closes, and the relay would serve them by turns.
+#[unsafe(no_mangle)]
+pub extern "C" fn dshr_suspend() -> *mut c_char {
+    respond(|| {
+        let pipes = current()?;
+        runtime().block_on(pipes.suspend());
+        Ok(json!({}))
+    })
+}
+
 /// What a ticket names, without dialing it.
 ///
 /// # Safety

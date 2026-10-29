@@ -21,7 +21,7 @@ use serde_json::{json, Value};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, UnixListener};
 use tokio::sync::Mutex;
-use tokio::task::JoinHandle;
+use tokio::task::{JoinHandle, JoinSet};
 
 pub mod ffi;
 
@@ -305,12 +305,35 @@ impl Pipes {
         self.endpoint.network_change().await;
     }
 
-    /// Close every pipe, remove the sockets and close the endpoint.
-    pub async fn shutdown(&self) {
+    /// Hang up on `host` and keep its pipe: the next socket dials a new
+    /// connection. For a connection that still looks open but carries nothing.
+    pub async fn reconnect(&self, host: EndpointId) -> bool {
+        let links: Vec<Arc<Link>> = match self.pipes.lock().await.get(&host) {
+            Some(pipe) => std::iter::once(pipe.link.clone()).chain(pipe.web.as_ref().map(|web| web.link.clone())).collect(),
+            None => return false,
+        };
+        for link in links {
+            if let Some(connection) = link.take().await {
+                connection.close(0u32.into(), b"reconnecting");
+            }
+        }
+        true
+    }
+
+    /// Close every pipe and remove the sockets; the endpoint stays up. The app
+    /// does this in the background rather than stopping the endpoint: a new
+    /// endpoint started while the old one is still closing would share its key,
+    /// and the two would take turns on the relay, stalling the new connections.
+    pub async fn suspend(&self) {
         let pipes: Vec<Pipe> = self.pipes.lock().await.drain().map(|(_, pipe)| pipe).collect();
         for pipe in pipes {
             stop_pipe(pipe).await;
         }
+    }
+
+    /// Close every pipe, remove the sockets and close the endpoint.
+    pub async fn shutdown(&self) {
+        self.suspend().await;
         self.endpoint.close().await;
     }
 }
@@ -333,10 +356,14 @@ async fn stop_web(web: WebPipe) {
     }
 }
 
+// The bridges live in the accept loop's JoinSet, so stopping a pipe (aborting the
+// loop) ends its sockets too, and nothing keeps its link and endpoint alive after it.
 async fn serve(listener: UnixListener, link: Arc<Link>) {
+    let mut bridges = JoinSet::new();
     while let Ok((socket, _)) = listener.accept().await {
+        while bridges.try_join_next().is_some() {}
         let link = link.clone();
-        tokio::spawn(async move {
+        bridges.spawn(async move {
             // A host that cannot be reached drops the socket: the app sees it as offline.
             let (from_app, to_app) = socket.into_split();
             let _ = bridge(from_app, to_app, &link).await;
@@ -345,10 +372,12 @@ async fn serve(listener: UnixListener, link: Arc<Link>) {
 }
 
 async fn serve_tcp(listener: TcpListener, link: Arc<Link>) {
+    let mut bridges = JoinSet::new();
     while let Ok((socket, _)) = listener.accept().await {
+        while bridges.try_join_next().is_some() {}
         let _ = socket.set_nodelay(true);
         let link = link.clone();
-        tokio::spawn(async move {
+        bridges.spawn(async move {
             let (from_app, to_app) = socket.into_split();
             let _ = bridge(from_app, to_app, &link).await;
         });

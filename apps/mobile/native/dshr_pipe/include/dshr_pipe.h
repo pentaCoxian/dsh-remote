@@ -23,12 +23,16 @@ char *dshr_close(const char *host_id);
 char *dshr_open_web(const char *host_id, uint16_t preferred_port);
 /* Stop the host's DSH Web tunnel. -> {closed} */
 char *dshr_close_web(const char *host_id);
-/* Connection details. -> {connected, remoteId?, paths:[{relay, selected, rttMs}], homeRelay, webPort} */
+/* Connection details. -> {connected, remoteId?, paths:[{relay, selected, rttMs}], homeRelay, webPort, web} */
 char *dshr_status(const char *host_id);
+/* Hang up on a host and keep its pipe: the next socket dials anew. -> {reconnected} */
+char *dshr_reconnect(const char *host_id);
 /* Parse a ticket without dialing. -> {endpointId, relayUrls, directAddresses} */
 char *dshr_ticket_info(const char *ticket);
 /* Tell iroh the network changed (Android). -> {} */
 char *dshr_network_changed(void);
+/* Close every pipe; the endpoint stays up (the app in the background). -> {} */
+char *dshr_suspend(void);
 /* Close every pipe and the endpoint. -> {} */
 char *dshr_stop(void);
 void dshr_string_free(char *text);
