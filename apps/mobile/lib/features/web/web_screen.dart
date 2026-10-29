@@ -14,6 +14,7 @@ import '../../core/errors.dart';
 import '../../push/push_registration.dart';
 import '../../state/host_session.dart';
 import '../../state/link.dart';
+import '../../state/pipe_manager.dart';
 import '../../state/providers.dart';
 import '../../transport/iroh_pipe.dart';
 import '../../ui/theme.dart';
@@ -92,6 +93,9 @@ class WebScreen extends ConsumerStatefulWidget {
 class _WebScreenState extends ConsumerState<WebScreen> {
   WebViewController? _controller;
   late final AppLifecycleListener _lifecycle;
+
+  /// Read up front: `ref` is gone by the time [dispose] runs.
+  late final PipeManager _pipes;
   Timer? _watch;
   int? _port;
   String? _error;
@@ -109,6 +113,7 @@ class _WebScreenState extends ConsumerState<WebScreen> {
   @override
   void initState() {
     super.initState();
+    _pipes = ref.read(pipeManagerProvider);
     // The app closes the tunnel when backgrounded (app.dart); reopen it on return.
     _lifecycle = AppLifecycleListener(onHide: () => _signalPage(online: false), onResume: () => unawaited(_connect()));
     unawaited(_connect());
@@ -142,7 +147,7 @@ class _WebScreenState extends ConsumerState<WebScreen> {
   void dispose() {
     _lifecycle.dispose();
     _watch?.cancel();
-    unawaited(ref.read(pipeManagerProvider).closeWeb(_hostId));
+    unawaited(_pipes.closeWeb(_hostId));
     super.dispose();
   }
 
