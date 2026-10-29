@@ -214,7 +214,6 @@ export class RemoteHost {
       this.state.onDeviceRevoked((device) => {
         this.leases.releaseDevice(device.deviceId);
         adapter.accessChanged();
-        this.web?.forget(device.peerId);
         // Hang up after a grace period, so the 4403 close frame and in-flight replies reach the
         // phone first; keep the connection if another live grant uses the same phone key.
         const timer = setTimeout(() => {

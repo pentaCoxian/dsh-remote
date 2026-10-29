@@ -19,6 +19,8 @@ export interface DeviceRecord {
   revokedAt: number | null;
   /** Where and how to notify this device; absent until it registers (`PUT /v1/push`). */
   push?: PushRegistration;
+  /** Until when its DSH Web window is open (`POST /v1/web/session`); stored, so a host restart keeps the tunnel. */
+  webUntil?: number;
 }
 
 /** A device's notification route: its gateway handle and the key only it and this host hold. */
@@ -113,12 +115,13 @@ export class HostState {
     await this.store.write(this.doc);
   }
 
-  /** Revoke a device and notify listeners (which close its sockets). Its push route goes with it. */
+  /** Revoke a device and notify listeners (which close its sockets). Its push route and DSH Web window go with it. */
   async revokeDevice(deviceId: string): Promise<boolean> {
     const device = this.device(deviceId);
     if (device === undefined || device.revokedAt !== null) return false;
     device.revokedAt = this.clock.now();
     delete device.push;
+    delete device.webUntil;
     await this.store.write(this.doc);
     for (const listener of this.revokedListeners) listener(device);
     return true;
@@ -134,6 +137,14 @@ export class HostState {
       this.lastSeenFlush = now;
       void this.store.write(this.doc).catch(() => {});
     }
+  }
+
+  /** Open a device's DSH Web window until `until`. */
+  async setWebWindow(deviceId: string, until: number): Promise<void> {
+    const device = this.device(deviceId);
+    if (device === undefined) return;
+    device.webUntil = until;
+    await this.store.write(this.doc);
   }
 
   /** Set or clear (`undefined`) a device's push route. */

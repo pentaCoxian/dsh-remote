@@ -1,5 +1,8 @@
 import { isValid, WEB_ALPN } from '@dsh-remote/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { HostKey } from '../src/core/host-key.ts';
+import type { HostStateDocument } from '../src/core/state.ts';
+import { MemoryStore } from '../src/core/store.ts';
 import { startFakeDshWeb, type FakeDshWeb } from './helpers/fake-dsh-web.ts';
 import { dialTicket, type IrohDialer } from './helpers/iroh.ts';
 import { startLiveHost, type LiveHost } from './helpers/live.ts';
@@ -85,6 +88,26 @@ describe('the DSH Web tunnel', () => {
     await live.host.revokeDevice(phone.deviceId);
     expect(await tunnel.connection.closed()).toContain('revoked');
     await expect(dial(WEB_ALPN, secretKey).then((d) => d.connection.closed())).resolves.toContain('web window closed');
+  });
+
+  it('keeps the window across a host restart, so the phone’s open DSH Web reconnects on its own', async () => {
+    await live.close();
+    const options = {
+      iroh: true,
+      identity: { hostKey: HostKey.generate(), stateStore: new MemoryStore<HostStateDocument>() },
+      web: { target: () => ({ host: '127.0.0.1', port: web.port }), launchTokenQuery: () => `token=${TOKEN}` },
+    };
+    live = await startLiveHost(options);
+    const { phone, api, secretKey } = await pairPhone();
+    await live.signed(phone, { method: 'POST', target: '/v1/web/session', port: api.port });
+    const before = await dial(WEB_ALPN, secretKey);
+    const cookie = String((await browse(before.port, `/?token=${TOKEN}`)).headers['set-cookie']).split(';')[0]!;
+
+    await live.close();
+    live = await startLiveHost(options);
+    // No new POST /v1/web/session: the WebView just reconnects with the cookie it has.
+    const after = await dial(WEB_ALPN, secretKey);
+    expect((await browse(after.port, '/', cookie)).status).toBe(200);
   });
 
   it('reports DSH Web as unavailable when it is not serving plain HTTP', async () => {

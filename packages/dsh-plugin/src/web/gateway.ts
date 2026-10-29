@@ -28,9 +28,11 @@ const DEFAULT_WINDOW_MS = 12 * 3600_000;
  * own gate still applies on the other side: its Host/Origin fence accepts
  * loopback authorities on any port, and its owner cookie comes from DSH's launch
  * token, so the phone runs DSH Web exactly as a local browser would.
+ *
+ * Windows are stored with the device: DSH's cookie outlives a restart, so the
+ * phone's open DSH Web reconnects to the restarted host on its own.
  */
 export class WebGateway {
-  private readonly windows = new Map<string, { deviceId: string; until: number }>();
   private readonly windowMs: number;
   private readonly state: HostState;
   private readonly clock: Clock;
@@ -52,30 +54,20 @@ export class WebGateway {
   }
 
   /** Open (or extend) `device`'s window; the caller has verified its signature and `web:open` scope. */
-  open(device: DeviceRecord): { tokenQuery: string; expiresAt: number } | undefined {
+  async open(device: DeviceRecord): Promise<{ tokenQuery: string; expiresAt: number } | undefined> {
     const tokenQuery = this.options.launchTokenQuery();
     if (tokenQuery === undefined || this.unavailable() !== undefined) return undefined;
     const expiresAt = Math.min(this.clock.now() + this.windowMs, device.expiresAt);
-    this.windows.set(device.peerId, { deviceId: device.deviceId, until: expiresAt });
+    await this.state.setWebWindow(device.deviceId, expiresAt);
     return { tokenQuery, expiresAt };
   }
 
-  /** Whether `peer` may use the tunnel now: an open window and a device grant still live. */
+  /** Whether `peer` may use the tunnel now: a device of that peer with an open window and a live grant. */
   allows(peer: PeerIdentity): boolean {
-    const window = this.windows.get(peer.peerId);
-    if (window === undefined) return false;
-    const device = this.state.device(window.deviceId);
     const now = this.clock.now();
-    if (window.until <= now || device === undefined || device.revokedAt !== null || device.expiresAt <= now || device.peerId !== peer.peerId || !device.scopes.includes('web:open')) {
-      this.windows.delete(peer.peerId);
-      return false;
-    }
-    return true;
-  }
-
-  /** Close the window of a revoked device. */
-  forget(peerId: string): void {
-    this.windows.delete(peerId);
+    return this.state
+      .devices()
+      .some((device) => device.peerId === peer.peerId && (device.webUntil ?? 0) > now && device.revokedAt === null && device.expiresAt > now && device.scopes.includes('web:open'));
   }
 
   /** Pipe one tunnel stream to DSH Web; refused streams are reset. */

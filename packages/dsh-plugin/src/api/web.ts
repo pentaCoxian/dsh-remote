@@ -17,7 +17,7 @@ export function webRoutes(gateway: WebGateway, mobileUi?: () => MobileUiStatus):
       auth: 'device',
       scope: 'web:open',
       async handle({ device }) {
-        const session = gateway.open(device);
+        const session = await gateway.open(device);
         if (session === undefined) throw new ApiError('UNAVAILABLE', 'DSH Web cannot be opened remotely right now');
         // Whether DSH Web will look right on the phone; the app says so when not.
         const layout = mobileUi?.();
