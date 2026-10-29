@@ -171,11 +171,21 @@ class _WebScreenState extends ConsumerState<WebScreen> {
       _link(LinkState.connecting);
     }
     try {
+      // A notification tapped on a cold start opens this screen before the
+      // hosts have loaded from the secure store: wait for them.
+      await ref.read(hostsProvider.future);
+      if (!mounted) return;
       final session = ref.read(hostSessionProvider(_hostId));
-      if (session == null) throw const ApiException(status: 403, code: 'DEVICE_REVOKED', message: 'not paired');
+      if (session == null) {
+        // Not paired on this phone (forgotten since): nothing to open.
+        context.go('/');
+        return;
+      }
       final web = await _openWindow(session);
       if (mounted) setState(() => _noPhoneLayout = web.phoneLayout == false);
       final host = ref.read(hostsProvider).valueOrNull?.where((h) => h.hostId == _hostId).firstOrNull;
+      // The host accepted this phone's signed request: an earlier refusal no longer holds.
+      if (host?.revoked == true) unawaited(ref.read(hostsProvider.notifier).edit(_hostId, (h) => h.copyWith(revoked: false)));
       final port = await ref.read(pipeManagerProvider).openWeb(_hostId, () => host?.ticket ?? session.host.ticket);
       if (!mounted) return;
       if (!_inForeground) {

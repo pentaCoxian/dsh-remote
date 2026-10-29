@@ -91,7 +91,8 @@ class _HostRow extends ConsumerWidget {
         borderRadius: BorderRadius.circular(Radii.control),
         child: InkWell(
           borderRadius: BorderRadius.circular(Radii.control),
-          onTap: host.revoked ? null : () => context.push('/host/${host.hostId}'),
+          // A host marked revoked is asked again when opened.
+          onTap: () => context.push('/host/${host.hostId}'),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 4, 12),
             child: Row(children: [

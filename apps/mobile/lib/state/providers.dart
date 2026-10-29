@@ -61,13 +61,16 @@ final networkChangesProvider = StateProvider<int>((_) => 0);
 
 /// The signed API of one host. Rebuilt only when its identity changes: a
 /// refreshed ticket goes to the open pipe without tearing the session down.
+/// Null while the hosts are still loading (await [hostsProvider] first) and for
+/// a host not paired on this phone. A host marked revoked keeps its session:
+/// only the host can say whether that still holds.
 final hostSessionProvider = Provider.family<HostSession?, String>((ref, hostId) {
   final identity = ref.watch(hostsProvider.select((value) {
     final host = value.valueOrNull?.where((h) => h.hostId == hostId).firstOrNull;
-    return host == null ? null : (host.deviceId, host.keyAlias, host.revoked);
+    return host == null ? null : (host.deviceId, host.keyAlias);
   }));
   final host = _host(ref, hostId);
-  if (identity == null || host == null || host.revoked) return null;
+  if (identity == null || host == null) return null;
   // The latest stored ticket, read whenever the pipe (re)opens.
   String ticket() => _host(ref, hostId)?.ticket ?? host.ticket;
   final session = HostSession(host: host, link: ref.read(pipeManagerProvider).link(hostId, ticket), keys: ref.read(deviceKeysProvider));

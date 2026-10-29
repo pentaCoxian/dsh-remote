@@ -32,7 +32,8 @@ class PairedHost {
   final DateTime pairedAt;
   final String? lastSessionId;
 
-  /// The host revoked this phone; it stays listed so the user sees why.
+  /// The host refused this phone (revoked or unpaired) when last asked; it
+  /// stays listed so the user sees why, and opening it asks the host again.
   final bool revoked;
 
   PairedHost copyWith({String? name, String? ticket, String? lastSessionId, bool? revoked}) => PairedHost(
