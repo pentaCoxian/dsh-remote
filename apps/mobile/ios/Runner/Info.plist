@@ -8,6 +8,9 @@
 	<string>$(AppIdentifierPrefix)</string>
 	<key>NSCameraUsageDescription</key>
 	<string>DSH Remote scans the pairing code your host shows.</string>
+	<!-- Export compliance, declared once for every build: only standard encryption (TLS 1.3 in QUIC, AES-GCM). -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
