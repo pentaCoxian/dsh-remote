@@ -62,8 +62,15 @@ write_files:
     content: |
       APT::Periodic::Update-Package-Lists "1";
       APT::Periodic::Unattended-Upgrade "1";
+  - path: /etc/systemd/journald.conf.d/retention.conf
+    permissions: "0644"
+    content: |
+      # The relay logs client IP addresses; the privacy policy promises 14 days.
+      [Journal]
+      MaxRetentionSec=14day
 
 runcmd:
+  - [systemctl, restart, systemd-journald]
   - [sh, -c, 'if command -v ufw >/dev/null 2>&1; then ufw allow 80/tcp && ufw allow 443/tcp && ufw allow 7842/udp; fi']
   - [sh, -c, 'curl -fsSL --retry 5 -o /tmp/iroh-relay.tgz https://github.com/n0-computer/iroh/releases/download/v${version}/iroh-relay-v${version}-x86_64-unknown-linux-musl.tar.gz']
   - [sh, -c, 'echo "${sha256}  /tmp/iroh-relay.tgz" | sha256sum -c -']
