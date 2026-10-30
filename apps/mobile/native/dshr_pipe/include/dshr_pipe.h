@@ -27,6 +27,8 @@ char *dshr_close_web(const char *host_id);
 char *dshr_status(const char *host_id);
 /* Hang up on a host and keep its pipe: the next socket dials anew. -> {reconnected} */
 char *dshr_reconnect(const char *host_id);
+/* Whether the DSH Web tunnel answers now; a stalled connection is hung up. -> {answered} */
+char *dshr_probe_web(const char *host_id);
 /* Parse a ticket without dialing. -> {endpointId, relayUrls, directAddresses} */
 char *dshr_ticket_info(const char *ticket);
 /* Tell iroh the network changed (Android). -> {} */

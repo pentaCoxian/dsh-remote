@@ -43,6 +43,8 @@ const DRAIN_TIMEOUT: Duration = Duration::from_secs(30);
 /// next socket dials a new one. iroh's own 30 s kept a dead connection (a restarted
 /// host, a path the network dropped) looking open while DSH Web stood still on it.
 const IDLE_TIMEOUT: Duration = Duration::from_secs(10);
+/// How long the web link may take to answer a probe before it counts as stalled.
+const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub type Result<T> = std::result::Result<T, String>;
 
@@ -310,6 +312,34 @@ impl Pipes {
     /// Tell iroh the network changed (Android does not let native code see it).
     pub async fn network_changed(&self) {
         self.endpoint.network_change().await;
+    }
+
+    /// Whether the host's DSH Web tunnel answers now. A connection can look open,
+    /// its pings acknowledged, while nothing the host sends on its streams arrives,
+    /// and DSH Web stands still on it until the app restarts. The probe is an empty
+    /// stream: the host hands it to DSH Web, which hangs up at once, so any answer
+    /// (the stream's end, or a reset) shows the way back works. A connection with no
+    /// answer in PROBE_TIMEOUT is hung up, and the next socket dials a new one. True
+    /// while a dial is under way.
+    pub async fn probe_web(&self, host: EndpointId) -> bool {
+        let Some(link) = self.pipes.lock().await.get(&host).and_then(|pipe| pipe.web.as_ref()).map(|web| web.link.clone()) else {
+            return false;
+        };
+        let Ok(current) = link.connection.try_lock() else { return true };
+        let Some(connection) = current.connection.clone().filter(|c| c.close_reason().is_none()) else { return false };
+        drop(current);
+        let answered = tokio::time::timeout(PROBE_TIMEOUT, async {
+            let (mut send, mut recv) = connection.open_bi().await.ok()?;
+            send.finish().ok()?;
+            let _ = recv.read(&mut [0u8; 64]).await;
+            Some(())
+        })
+        .await
+        .is_ok_and(|answer| answer.is_some());
+        if !answered {
+            connection.close(0u32.into(), b"stalled");
+        }
+        answered
     }
 
     /// Hang up on `host` and keep its pipe: the next socket dials a new

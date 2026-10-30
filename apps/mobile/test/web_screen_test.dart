@@ -73,6 +73,16 @@ class _Pipe implements IrohPipe {
   @override
   Future<PipeStatus> status(String hostId) async => PipeStatus(connected: true, paths: const [], webPort: webPort, webConnected: webPort != null);
 
+  /// Whether the tunnel answers its probe; a stalled one is hung up.
+  var answers = true;
+  var probes = 0;
+
+  @override
+  Future<bool> probeWeb(String hostId) async {
+    probes++;
+    return answers;
+  }
+
   @override
   Future<void> close(String hostId) async {}
 
@@ -307,6 +317,26 @@ void main() {
     await tester.pump(const Duration(seconds: 5));
     await until(tester, () => settled(container) && webView.loads.length == 2);
     expect(webView.loads.last, page);
+    await close(tester, container);
+  });
+
+  testWidgets('the link check reopens a tunnel that looks up but stopped answering, and loads DSH Web afresh', (tester) async {
+    final store = MemorySecureStore();
+    await HostStore(store).save([_paired()]);
+    final pipe = _Pipe(host.path, webPort: 30123);
+    final container = await open(tester, store, pipe: pipe);
+    await until(tester, () => settled(container) && webView.loads.length == 1);
+    await drain(tester);
+    int windows() => host.routes.where((route) => route == 'POST /v1/web/session').length;
+    expect(windows(), 1);
+
+    pipe.answers = false;
+    await tester.pump(const Duration(seconds: 5));
+    await until(tester, () => windows() == 2);
+    expect(pipe.probes, 1);
+    // What the page asked for while nothing came back is lost; it may never have started.
+    await until(tester, () => webView.loads.length == 2);
+    expect(webView.loads, [page, page]);
     await close(tester, container);
   });
 

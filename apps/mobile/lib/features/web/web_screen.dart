@@ -108,9 +108,12 @@ class _WebScreenState extends ConsumerState<WebScreen> {
   Color? _pageColor;
   bool _connecting = false;
 
-  /// DSH Web itself failed to load, so the WebView shows an error page: telling
-  /// it the network is back does nothing there, and the next connect loads DSH
-  /// Web again.
+  /// A link check is under way (its probe can take seconds).
+  bool _checking = false;
+
+  /// DSH Web's page failed to load (the WebView shows an error page), or the
+  /// tunnel stalled under it: telling such a page the network is back does
+  /// nothing, so the next connect loads DSH Web afresh.
   bool _pageFailed = false;
 
   String get _hostId => widget.hostId;
@@ -130,23 +133,35 @@ class _WebScreenState extends ConsumerState<WebScreen> {
 
   /// Keeps the tunnel up while DSH Web is open. DSH Web retries on its own, but
   /// its retries cannot reopen this phone's window or redial a host that was
-  /// down, so when the tunnel's connection is gone (or the first open failed)
-  /// this reopens it quietly, and DSH Web reconnects as soon as it is back.
+  /// down, so when the tunnel's connection is gone, or up with nothing coming
+  /// back on it (the probe hangs that one up), or the first open failed, this
+  /// reopens it quietly, and DSH Web reconnects as soon as it is back.
   Future<void> _checkLink() async {
-    if (_connecting || !_inForeground) return;
+    if (_connecting || _checking || !_inForeground) return;
     final link = ref.read(linkStateProvider(_hostId));
     if (link == LinkState.revoked || link == LinkState.outdated) return;
     if (_port == null) {
       if (_error != null) await _connect(quiet: true);
       return;
     }
-    final status = await ref.read(pipeManagerProvider).status(_hostId).catchError((_) => const PipeStatus(connected: false, paths: []));
-    if (!mounted || _connecting) return;
-    if (status.webConnected == true && !_pageFailed) {
-      _link(LinkState.online);
-      unawaited(_matchPageColor());
-    } else {
-      await _connect(quiet: true);
+    _checking = true;
+    try {
+      final status = await _pipes.status(_hostId).catchError((_) => const PipeStatus(connected: false, paths: []));
+      if (!mounted || _connecting) return;
+      final up = status.webConnected == true;
+      final answers = up && !_pageFailed && await _pipes.probeWeb(_hostId);
+      if (!mounted || _connecting) return;
+      if (answers) {
+        _link(LinkState.online);
+        unawaited(_matchPageColor());
+      } else {
+        // Up with nothing coming back (the probe hung it up): what DSH Web asked
+        // for meanwhile is lost, and a page that was starting stays half built.
+        if (up) _pageFailed = true;
+        await _connect(quiet: true);
+      }
+    } finally {
+      _checking = false;
     }
   }
 

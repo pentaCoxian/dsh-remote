@@ -93,6 +93,10 @@ abstract interface class IrohPipe {
   /// Hang up on [hostId] and keep its pipe: the next request dials a new connection.
   Future<void> reconnect(String hostId);
 
+  /// Whether [hostId]'s DSH Web tunnel answers now. A connection that looks open
+  /// but brings nothing back is hung up, so the next request dials a new one.
+  Future<bool> probeWeb(String hostId);
+
   /// The EndpointId a ticket names, without dialing.
   Future<String> ticketHostId(String ticket);
 
@@ -140,7 +144,7 @@ Map<String, dynamic> _invoke(String name, List<Object> args) {
         reply = lib.lookupFunction<_TwoC, _TwoC>('dshr_$name')(text(args[0]), text(args[1]));
       case 'open_web':
         reply = lib.lookupFunction<_WebC, _WebD>('dshr_open_web')(text(args[0]), args[1] as int);
-      case 'close' || 'close_web' || 'status' || 'ticket_info' || 'reconnect':
+      case 'close' || 'close_web' || 'status' || 'ticket_info' || 'reconnect' || 'probe_web':
         reply = lib.lookupFunction<_OneC, _OneC>('dshr_$name')(text(args[0]));
       case 'network_changed' || 'suspend' || 'stop':
         reply = lib.lookupFunction<_NoneC, _NoneC>('dshr_$name')();
@@ -193,6 +197,9 @@ class NativeIrohPipe implements IrohPipe {
 
   @override
   Future<void> reconnect(String hostId) => _call('reconnect', [hostId]);
+
+  @override
+  Future<bool> probeWeb(String hostId) async => (await _call('probe_web', [hostId]))['answered'] == true;
 
   @override
   Future<String> ticketHostId(String ticket) async => (await _call('ticket_info', [ticket]))['endpointId'] as String;

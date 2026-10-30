@@ -183,6 +183,20 @@ pub unsafe extern "C" fn dshr_reconnect(host: *const c_char) -> *mut c_char {
     })
 }
 
+/// Whether the host's DSH Web tunnel answers now; a stalled connection is hung
+/// up, so the next socket dials anew.
+///
+/// # Safety
+/// `host` must be a valid C string.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dshr_probe_web(host: *const c_char) -> *mut c_char {
+    respond(|| {
+        let host = host_id(&unsafe { string(host, "host id") }?)?;
+        let pipes = current()?;
+        Ok(json!({ "answered": runtime().block_on(pipes.probe_web(host)) }))
+    })
+}
+
 /// Close every pipe and keep the endpoint (the app going to the background).
 /// Coming back reopens pipes on the same endpoint: a fresh one would share the
 /// key with this one while it closes, and the relay would serve them by turns.

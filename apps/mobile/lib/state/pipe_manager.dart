@@ -145,6 +145,10 @@ class PipeManager {
     if (_open.remove(hostId) != null) await pipe.close(hostId).catchError((_) {});
   }
 
+  /// Whether [hostId]'s DSH Web tunnel answers now; one that looks open but
+  /// brings nothing back is hung up, so the next request dials a new connection.
+  Future<bool> probeWeb(String hostId) async => _open.containsKey(hostId) && await pipe.probeWeb(hostId).catchError((_) => false);
+
   /// Hang up on [hostId] and keep its pipe, for a connection that looks open but
   /// carries nothing: the next request dials a new one.
   Future<void> reconnect(String hostId) async {

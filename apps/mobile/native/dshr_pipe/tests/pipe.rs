@@ -171,6 +171,43 @@ async fn gives_up_on_a_host_that_vanished() {
     std::mem::forget(host);
 }
 
+/// The web link's probe: answered through a host that serves its streams. A host
+/// whose connection stays up (acknowledging, pinging) while no stream gets an
+/// answer has the web connection hung up, so the next socket dials anew.
+#[tokio::test(flavor = "multi_thread")]
+async fn probes_the_web_link_and_hangs_up_a_stalled_one() {
+    let host = echo_host().await;
+    let pipes = Pipes::start(SecretKey::generate().to_bytes(), &[]).await.unwrap();
+    pipes.open(&EndpointTicket::new(host.addr()).to_string(), &socket_path("probe")).await.unwrap();
+    assert!(!pipes.probe_web(host.id()).await, "no tunnel yet");
+    pipes.open_web(host.id(), 0).await.unwrap();
+    assert!(pipes.probe_web(host.id()).await);
+    pipes.shutdown().await;
+    host.close().await;
+
+    // Takes every connection and keeps it, but never takes a stream.
+    let stalled = Endpoint::builder(presets::Minimal).alpns(vec![ALPN.to_vec(), WEB_ALPN.to_vec()]).relay_mode(RelayMode::Disabled).bind().await.unwrap();
+    let kept = std::sync::Arc::new(tokio::sync::Mutex::new(Vec::new()));
+    let (server, held) = (stalled.clone(), kept.clone());
+    tokio::spawn(async move {
+        while let Some(incoming) = server.accept().await {
+            if let Ok(connection) = incoming.await {
+                held.lock().await.push(connection);
+            }
+        }
+    });
+    let pipes = Pipes::start(SecretKey::generate().to_bytes(), &[]).await.unwrap();
+    pipes.open(&EndpointTicket::new(stalled.addr()).to_string(), &socket_path("stalled")).await.unwrap();
+    pipes.open_web(stalled.id(), 0).await.unwrap();
+    assert_eq!(pipes.status(stalled.id()).await["web"]["connected"], true);
+    let started = std::time::Instant::now();
+    assert!(!pipes.probe_web(stalled.id()).await);
+    assert!(started.elapsed() >= Duration::from_secs(4), "waited for an answer first");
+    assert_eq!(pipes.status(stalled.id()).await["web"]["connected"], false, "hung up");
+    pipes.shutdown().await;
+    stalled.close().await;
+}
+
 async fn round_trip(path: &std::path::Path, text: &str) -> String {
     let mut socket = UnixStream::connect(path).await.unwrap();
     socket.write_all(text.as_bytes()).await.unwrap();
