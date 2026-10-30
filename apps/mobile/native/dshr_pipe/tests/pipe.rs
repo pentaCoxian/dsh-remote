@@ -147,6 +147,30 @@ async fn follows_a_restarted_host_to_its_new_address() {
     restarted.close().await;
 }
 
+/// A host killed (or its machine restarted) says nothing on the way out. The pipe
+/// gives its connection up within the idle timeout instead of iroh's 30 s, during
+/// which the connection looked open and DSH Web stood still on it.
+#[tokio::test(flavor = "multi_thread")]
+async fn gives_up_on_a_host_that_vanished() {
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let host = runtime.spawn(echo_host()).await.unwrap();
+    let pipes = Pipes::start(SecretKey::generate().to_bytes(), &[]).await.unwrap();
+    let path = socket_path("vanish");
+    pipes.open(&EndpointTicket::new(host.addr()).to_string(), &path).await.unwrap();
+    assert_eq!(round_trip(&path, "before").await, "BEFORE");
+
+    // Its tasks stop and its socket closes, with no CONNECTION_CLOSE sent.
+    runtime.shutdown_background();
+    let gone = std::time::Instant::now();
+    while pipes.status(host.id()).await["connected"] == true {
+        assert!(gone.elapsed() < Duration::from_secs(15), "still looks connected after {:?}", gone.elapsed());
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+    pipes.shutdown().await;
+    // Dropping it would reach for the runtime that is gone.
+    std::mem::forget(host);
+}
+
 async fn round_trip(path: &std::path::Path, text: &str) -> String {
     let mut socket = UnixStream::connect(path).await.unwrap();
     socket.write_all(text.as_bytes()).await.unwrap();

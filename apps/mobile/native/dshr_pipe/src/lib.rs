@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use iroh::endpoint::{presets, Connection};
+use iroh::endpoint::{presets, Connection, QuicTransportConfig};
 use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMap, RelayMode, RelayUrl, SecretKey};
 use iroh_tickets::endpoint::EndpointTicket;
 use serde_json::{json, Value};
@@ -39,6 +39,10 @@ const DIAL_FAILURE_HOLD: Duration = Duration::from_secs(2);
 const STREAM_TIMEOUT: Duration = Duration::from_secs(10);
 /// How long the host may keep answering after the app closed its side of a socket.
 const DRAIN_TIMEOUT: Duration = Duration::from_secs(30);
+/// A connection that has heard nothing from the host for this long is closed, so the
+/// next socket dials a new one. iroh's own 30 s kept a dead connection (a restarted
+/// host, a path the network dropped) looking open while DSH Web stood still on it.
+const IDLE_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub type Result<T> = std::result::Result<T, String>;
 
@@ -162,9 +166,12 @@ impl Pipes {
     pub async fn start(secret_key: [u8; 32], relays: &[String]) -> Result<Self> {
         let relays = relays.iter().map(|url| url.parse::<RelayUrl>().map_err(|e| format!("bad relay url {url}: {e}"))).collect::<Result<Vec<_>>>()?;
         let relay_mode = if relays.is_empty() { RelayMode::Disabled } else { RelayMode::Custom(RelayMap::from_iter(relays.clone())) };
+        // iroh pings an idle connection every 5 s, so one that hears nothing for IDLE_TIMEOUT is dead.
+        let transport = QuicTransportConfig::builder().max_idle_timeout(Some(IDLE_TIMEOUT.try_into().expect("idle timeout fits a VarInt"))).build();
         let endpoint = Endpoint::builder(presets::Minimal)
             .secret_key(SecretKey::from_bytes(&secret_key))
             .relay_mode(relay_mode)
+            .transport_config(transport)
             .bind()
             .await
             .map_err(|e| format!("cannot start the iroh endpoint: {e}"))?;
