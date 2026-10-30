@@ -108,15 +108,22 @@ class _WebScreenState extends ConsumerState<WebScreen> {
   Color? _pageColor;
   bool _connecting = false;
 
+  /// DSH Web itself failed to load, so the WebView shows an error page: telling
+  /// it the network is back does nothing there, and the next connect loads DSH
+  /// Web again.
+  bool _pageFailed = false;
+
   String get _hostId => widget.hostId;
 
   @override
   void initState() {
     super.initState();
-    _pipes = ref.read(pipeManagerProvider);
+    _pipes = ref.read(pipeManagerProvider)..retainWeb(widget.hostId);
     // The app closes the tunnel when backgrounded (app.dart); reopen it on return.
     _lifecycle = AppLifecycleListener(onHide: () => _signalPage(online: false), onResume: () => unawaited(_connect()));
-    unawaited(_connect());
+    // After this build: the link state it sets is watched by the host list, and
+    // by the screen this one replaces when a notification is tapped.
+    unawaited(Future.microtask(_connect));
     _watch = Timer.periodic(const Duration(seconds: 5), (_) => unawaited(_checkLink()));
     ref.listenManual(networkChangesProvider, (_, __) => unawaited(_checkLink()));
   }
@@ -135,7 +142,7 @@ class _WebScreenState extends ConsumerState<WebScreen> {
     }
     final status = await ref.read(pipeManagerProvider).status(_hostId).catchError((_) => const PipeStatus(connected: false, paths: []));
     if (!mounted || _connecting) return;
-    if (status.webConnected == true) {
+    if (status.webConnected == true && !_pageFailed) {
       _link(LinkState.online);
       unawaited(_matchPageColor());
     } else {
@@ -147,11 +154,13 @@ class _WebScreenState extends ConsumerState<WebScreen> {
   void dispose() {
     _lifecycle.dispose();
     _watch?.cancel();
-    unawaited(_pipes.closeWeb(_hostId));
+    unawaited(_pipes.releaseWeb(_hostId));
     super.dispose();
   }
 
-  void _link(LinkState state) => ref.read(linkStateProvider(_hostId).notifier).state = state;
+  void _link(LinkState state) {
+    if (mounted) ref.read(linkStateProvider(_hostId).notifier).state = state;
+  }
 
   /// The tunnel stays closed in the background (app.dart): while it is open the
   /// host counts the phone as present and sends it no notifications. Android
@@ -182,7 +191,9 @@ class _WebScreenState extends ConsumerState<WebScreen> {
         return;
       }
       final web = await _openWindow(session);
-      if (mounted) setState(() => _noPhoneLayout = web.phoneLayout == false);
+      // A notification tapped while this screen was open replaced it meanwhile.
+      if (!mounted) return;
+      setState(() => _noPhoneLayout = web.phoneLayout == false);
       final host = ref.read(hostsProvider).valueOrNull?.where((h) => h.hostId == _hostId).firstOrNull;
       // The host accepted this phone's signed request: an earlier refusal no longer holds.
       if (host?.revoked == true) unawaited(ref.read(hostsProvider.notifier).edit(_hostId, (h) => h.copyWith(revoked: false)));
@@ -195,9 +206,11 @@ class _WebScreenState extends ConsumerState<WebScreen> {
       }
       _link(LinkState.online);
       if (_error != null) setState(() => _error = null);
-      // A new port is a new origin: DSH needs a fresh login there. The same port keeps the page.
-      if (_controller == null || port != _port) {
+      // A new port is a new origin: DSH needs a fresh login there. The same port
+      // keeps the page, unless the page itself failed to load.
+      if (_controller == null || port != _port || _pageFailed) {
         _port = port;
+        _pageFailed = false;
         final controller = _controller ?? _createController();
         setState(() {
           _controller = controller;
@@ -212,6 +225,7 @@ class _WebScreenState extends ConsumerState<WebScreen> {
       // Keep this host able to notify the phone (asks for the OS permission the first time).
       if (!quiet) unawaited(ref.read(pushRegistrarProvider).sync(session, ask: true).then((_) {}, onError: (_) {}));
     } on ApiException catch (error) {
+      if (!mounted) return;
       if (error.deviceGone) {
         _link(LinkState.revoked);
         unawaited(ref.read(hostsProvider.notifier).edit(_hostId, (h) => h.copyWith(revoked: true)));
@@ -283,6 +297,7 @@ class _WebScreenState extends ConsumerState<WebScreen> {
       },
       onWebResourceError: (error) {
         if (error.isForMainFrame != false && mounted) {
+          _pageFailed = true;
           setState(() => _error = 'Lost the connection to DSH Web.');
           _link(LinkState.offline);
         }
@@ -304,8 +319,10 @@ class _WebScreenState extends ConsumerState<WebScreen> {
 
   /// Reload the page, reopening the window first: a host that lost it would refuse the reload.
   Future<void> _reload() async {
+    // A page that failed to load is loaded afresh by the connect.
+    final failed = _pageFailed;
     await _connect(quiet: true);
-    await _controller?.reload();
+    if (!failed) await _controller?.reload();
   }
 
   Future<void> _back() async {

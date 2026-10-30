@@ -96,6 +96,25 @@ class PipeManager {
     if (_open.containsKey(hostId)) await pipe.closeWeb(hostId).catchError((_) {});
   }
 
+  /// DSH Web screens showing each host. A notification tapped while one is open
+  /// replaces it with a new screen, and the old one goes only once the new one
+  /// has opened the tunnel they share.
+  final Map<String, int> _webScreens = {};
+
+  /// A DSH Web screen for [hostId] is showing; pair with [releaseWeb].
+  void retainWeb(String hostId) => _webScreens.update(hostId, (n) => n + 1, ifAbsent: () => 1);
+
+  /// That screen is gone: the host's tunnel closes once no screen for it is left.
+  Future<void> releaseWeb(String hostId) async {
+    final left = (_webScreens[hostId] ?? 1) - 1;
+    if (left > 0) {
+      _webScreens[hostId] = left;
+      return;
+    }
+    _webScreens.remove(hostId);
+    await closeWeb(hostId);
+  }
+
   /// 20000–59999, from the host id.
   static int webPortFor(String hostId) => 20000 + int.parse(hostId.substring(0, 8), radix: 16) % 40000;
 
