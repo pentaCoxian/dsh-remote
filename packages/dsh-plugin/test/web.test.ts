@@ -1,8 +1,12 @@
+import { PeerStream } from '@dsh-remote/iroh-http';
 import { isValid, WEB_ALPN } from '@dsh-remote/protocol';
+import type { BiStream } from '@number0/iroh';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { systemClock } from '../src/core/clock.ts';
 import { HostKey } from '../src/core/host-key.ts';
-import type { HostStateDocument } from '../src/core/state.ts';
+import type { HostState, HostStateDocument } from '../src/core/state.ts';
 import { MemoryStore } from '../src/core/store.ts';
+import { WebGateway } from '../src/web/gateway.ts';
 import { startFakeDshWeb, type FakeDshWeb } from './helpers/fake-dsh-web.ts';
 import { dialTicket, type IrohDialer } from './helpers/iroh.ts';
 import { startLiveHost, type LiveHost } from './helpers/live.ts';
@@ -117,5 +121,49 @@ describe('the DSH Web tunnel', () => {
     const { phone, api } = await pairPhone();
     const session = await live.signed(phone, { method: 'POST', target: '/v1/web/session', port: api.port });
     expect(session.json.error.code).toBe('UNAVAILABLE');
+  });
+});
+
+describe('a tunnel stream', () => {
+  /**
+   * A bi-stream whose writes take a while to land, as native ones do while QUIC
+   * flow control waits on a slow phone. A reset discards whatever the phone has
+   * not read yet, so a reply must end with finish, never reset.
+   */
+  const fakeBi = (request: string) => {
+    const sent: Buffer[] = [];
+    const log: string[] = [];
+    let served = false;
+    const bi = {
+      send: {
+        writeAll: (bytes: number[]) => new Promise<void>((resolve) => setTimeout(() => (sent.push(Buffer.from(bytes)), resolve()), 30)),
+        finish: async () => void log.push('finish'),
+        reset: async () => void log.push('reset'),
+      },
+      recv: {
+        // The request, then the phone keeps its side open, as a browser does.
+        read: () => (served ? new Promise<number[]>(() => {}) : ((served = true), Promise.resolve(Array.from(Buffer.from(request))))),
+        stop: async () => {},
+      },
+    };
+    return { stream: new PeerStream(bi as unknown as BiStream), sent, log };
+  };
+
+  it('delivers a reply in full when DSH Web closes the connection right after it', async () => {
+    const web = await startFakeDshWeb(TOKEN);
+    const device = { peerId: 'phone', webUntil: Infinity, revokedAt: null, expiresAt: Infinity, scopes: ['web:open'] };
+    const gateway = new WebGateway({ devices: () => [device] } as unknown as HostState, systemClock, {
+      target: () => ({ host: '127.0.0.1', port: web.port }),
+      launchTokenQuery: () => `token=${TOKEN}`,
+    });
+    try {
+      const { stream, sent, log } = fakeBi(`GET /?token=${TOKEN} HTTP/1.1\r\nhost: 127.0.0.1:20000\r\nconnection: close\r\n\r\n`);
+      gateway.pipe(stream, { peerId: 'phone' });
+      await new Promise((resolve) => stream.once('close', resolve));
+      expect(log).toEqual(['finish']);
+      expect(Buffer.concat(sent).toString()).toMatch(/^HTTP\/1\.1 303 /);
+    } finally {
+      await web.close();
+    }
   });
 });

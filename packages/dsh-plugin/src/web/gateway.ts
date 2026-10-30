@@ -20,6 +20,8 @@ export interface WebGatewayOptions {
 }
 
 const DEFAULT_WINDOW_MS = 12 * 3600_000;
+/** How long a reply may take to reach the phone after DSH Web closed its side (the phone pipe's drain timeout). */
+const DRAIN_MS = 30_000;
 
 /**
  * The DSH Web tunnel's host end. A phone opens a window with a request signed
@@ -87,7 +89,19 @@ export class WebGateway {
     stream.on('error', end);
     stream.pipe(socket);
     socket.pipe(stream);
-    socket.once('close', () => stream.destroy());
+    socket.once('close', (hadError) => {
+      if (hadError || stream.writableFinished) return void stream.destroy();
+      // DSH Web hung up after its reply (a `connection: close` answer, its keep-alive
+      // timeout): let the reply reach the phone first. Hanging up now would reset the
+      // stream, and a reset discards whatever the phone has not read yet.
+      const timer = setTimeout(() => stream.destroy(), DRAIN_MS);
+      timer.unref();
+      stream.once('finish', () => {
+        clearTimeout(timer);
+        stream.destroy();
+      });
+      if (!stream.writableEnded) stream.end();
+    });
     stream.once('close', () => socket.destroy());
   }
 }
