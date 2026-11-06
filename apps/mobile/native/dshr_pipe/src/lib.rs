@@ -388,6 +388,7 @@ async fn stop_pipe(mut pipe: Pipe) {
         stop_web(web).await;
     }
     pipe.accept.abort();
+    let _ = pipe.accept.await;
     if let Some(connection) = pipe.link.take().await {
         connection.close(0u32.into(), b"closed by app");
     }
@@ -395,7 +396,10 @@ async fn stop_pipe(mut pipe: Pipe) {
 }
 
 async fn stop_web(web: WebPipe) {
+    // The listener closes when the aborted loop is dropped, a moment after the abort:
+    // wait for it, so the port is free once the tunnel is stopped.
     web.accept.abort();
+    let _ = web.accept.await;
     if let Some(connection) = web.link.take().await {
         connection.close(0u32.into(), b"closed by app");
     }
