@@ -47,9 +47,9 @@ variable "acme_contact" {
 }
 
 variable "client_rx_bytes_per_second" {
-  description = "Per-client relay rate limit. DSH Remote traffic is text; this caps what an abusive client can push through an open relay."
+  description = "Per-client relay rate limit, with a burst of four times it. A long session's history arrives within the burst; this caps what an abusive client can push through an open relay."
   type        = number
-  default     = 1048576
+  default     = 8388608
 }
 
 variable "admin_ssh_public_key_file" {

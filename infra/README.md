@@ -29,7 +29,10 @@ infra/tofu.sh output relay_urls
   `terraform.tfvars`.
 - **Changes:** cloud-init runs once at first boot, so a changed template takes effect only on a
   replaced instance: `infra/tofu.sh apply -replace='vultr_instance.relay["nrt"]'`. A replacement
-  gets a new certificate (Let's Encrypt allows 5 per hostname per week).
+  gets a new certificate (Let's Encrypt allows 5 per hostname per week) and loses the push gateway
+  on the box (its key and handles, below). A change to `relay.toml` alone, such as the rate limit,
+  is made in place instead: edit `/etc/iroh-relay/relay.toml` on the box to match the template and
+  `systemctl restart iroh-relay`; phones and hosts reconnect within seconds.
 - **More regions:** add region ids to `regions`, e.g. `["nrt", "sgp", "bom", "fra", "ewr", "lax",
   "sao"]`. São Paulo costs $9 for the same plan.
 
