@@ -208,6 +208,56 @@ async fn probes_the_web_link_and_hangs_up_a_stalled_one() {
     stalled.close().await;
 }
 
+/// A link busy bringing data back (a long history on a slow path, queued ahead of
+/// the probe's answer) is not stalled: the probe leaves it up though its own
+/// answer never comes.
+#[tokio::test(flavor = "multi_thread")]
+async fn leaves_a_busy_web_link_up() {
+    // Streams data on each connection's first stream for 8 s, and never answers another.
+    let busy = Endpoint::builder(presets::Minimal).alpns(vec![ALPN.to_vec(), WEB_ALPN.to_vec()]).relay_mode(RelayMode::Disabled).bind().await.unwrap();
+    let server = busy.clone();
+    tokio::spawn(async move {
+        while let Some(incoming) = server.accept().await {
+            let Ok(connection) = incoming.await else { continue };
+            tokio::spawn(async move {
+                let mut unanswered = Vec::new();
+                while let Ok((mut send, recv)) = connection.accept_bi().await {
+                    if recv.id().index() > 0 {
+                        unanswered.push((send, recv));
+                        continue;
+                    }
+                    tokio::spawn(async move {
+                        let _request = recv;
+                        for _ in 0..40 {
+                            if send.write_all(&[b'x'; 1024]).await.is_err() {
+                                break;
+                            }
+                            tokio::time::sleep(Duration::from_millis(200)).await;
+                        }
+                    });
+                }
+            });
+        }
+    });
+    let pipes = Pipes::start(SecretKey::generate().to_bytes(), &[]).await.unwrap();
+    pipes.open(&EndpointTicket::new(busy.addr()).to_string(), &socket_path("busy")).await.unwrap();
+    let port = pipes.open_web(busy.id(), 0).await.unwrap()["port"].as_u64().unwrap() as u16;
+    let mut download = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+    download.write_all(b"GET /history").await.unwrap();
+    let reading = tokio::spawn(async move {
+        let mut buf = vec![0u8; 4096];
+        while download.read(&mut buf).await.is_ok_and(|n| n > 0) {}
+    });
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let started = std::time::Instant::now();
+    assert!(pipes.probe_web(busy.id()).await, "busy, not stalled");
+    assert!(started.elapsed() >= Duration::from_secs(4), "its own answer never came");
+    assert_eq!(pipes.status(busy.id()).await["web"]["connected"], true, "left up");
+    reading.abort();
+    pipes.shutdown().await;
+    busy.close().await;
+}
+
 async fn round_trip(path: &std::path::Path, text: &str) -> String {
     let mut socket = UnixStream::connect(path).await.unwrap();
     socket.write_all(text.as_bytes()).await.unwrap();

@@ -318,9 +318,11 @@ impl Pipes {
     /// its pings acknowledged, while nothing the host sends on its streams arrives,
     /// and DSH Web stands still on it until the app restarts. The probe is an empty
     /// stream: the host hands it to DSH Web, which hangs up at once, so any answer
-    /// (the stream's end, or a reset) shows the way back works. A connection with no
-    /// answer in PROBE_TIMEOUT is hung up, and the next socket dials a new one. True
-    /// while a dial is under way.
+    /// (the stream's end, or a reset) shows the way back works. So does any other
+    /// stream data arriving meanwhile: on a slow relay path a long history queues
+    /// seconds of data ahead of the answer, and that connection is busy, not stalled.
+    /// One that brings nothing back in PROBE_TIMEOUT is hung up, and the next socket
+    /// dials a new one. True while a dial is under way.
     pub async fn probe_web(&self, host: EndpointId) -> bool {
         let Some(link) = self.pipes.lock().await.get(&host).and_then(|pipe| pipe.web.as_ref()).map(|web| web.link.clone()) else {
             return false;
@@ -328,6 +330,11 @@ impl Pipes {
         let Ok(current) = link.connection.try_lock() else { return true };
         let Some(connection) = current.connection.clone().filter(|c| c.close_reason().is_none()) else { return false };
         drop(current);
+        let received = |connection: &Connection| {
+            let frames = connection.stats().frame_rx;
+            frames.stream + frames.reset_stream
+        };
+        let before = received(&connection);
         let answered = tokio::time::timeout(PROBE_TIMEOUT, async {
             let (mut send, mut recv) = connection.open_bi().await.ok()?;
             send.finish().ok()?;
@@ -336,10 +343,11 @@ impl Pipes {
         })
         .await
         .is_ok_and(|answer| answer.is_some());
-        if !answered {
-            connection.close(0u32.into(), b"stalled");
+        if answered || received(&connection) > before {
+            return true;
         }
-        answered
+        connection.close(0u32.into(), b"stalled");
+        false
     }
 
     /// Hang up on `host` and keep its pipe: the next socket dials a new
