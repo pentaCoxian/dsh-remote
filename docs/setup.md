@@ -41,7 +41,7 @@ Or from source:
 ```sh
 pnpm install
 pnpm -r build
-dsh plugin --profile web add "$PWD/packages/dsh-plugin" ~/.dsh/plugin-tarballs/dsh-mobile-maxxing-1.0.0.tgz
+dsh plugin --profile web add "$PWD/packages/dsh-plugin" ~/.dsh/plugin-tarballs/dsh-mobile-maxxing-1.0.3.tgz
 ```
 
 (The installer above leaves that dsh-mobile-maxxing file there.)
@@ -49,7 +49,7 @@ dsh plugin --profile web add "$PWD/packages/dsh-plugin" ~/.dsh/plugin-tarballs/d
 Then restart DSH.
 
 DSH Remote requires [dsh-mobile-maxxing](https://github.com/kuraneko1/dsh-mobile-maxxing) (MIT),
-which gives DSH Web its phone layout. The installer adds 1.0.0, the tested release; 0.6.0 or later
+which gives DSH Web its phone layout. The installer adds 1.0.3, the tested release; 0.6.0 or later
 works.
 - **Why a separate install:** DSH loads only the plugins its profile lists itself, so it is added
   next to DSH Remote rather than coming as a dependency.
